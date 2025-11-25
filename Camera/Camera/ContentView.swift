@@ -3,47 +3,78 @@ import ARKit
 import RealityKit
 
 struct ContentView: View {
+    @State private var isRecording = false   // Start/Stop-Status
+
     var body: some View {
-        ARViewContainer()
-            .edgesIgnoringSafeArea(.all)
+        ZStack {
+            // AR-Ansicht
+            ARViewContainer(isRecording: $isRecording)
+                .edgesIgnoringSafeArea(.all)
+
+            // Overlay: Start/Stop-Button
+            VStack {
+                Spacer()
+                Button(action: {
+                    isRecording.toggle()
+                    print("🎬 Recording ist jetzt: \(isRecording)")
+                }) {
+                    Text(isRecording ? "Stop" : "Start")
+                        .font(.title2)
+                        .padding()
+                        .frame(width: 160)
+                        .background(isRecording ? Color.red : Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(14)
+                        .padding(.bottom, 40)
+                }
+            }
+        }
     }
 }
 
 struct ARViewContainer: UIViewRepresentable {
 
-    func makeUIView(context: Context) -> ARView {
-        let arView = ARView(frame: .zero)
+    @Binding var isRecording: Bool
 
-        // Prüfen ob Body Tracking unterstützt wird
+    func makeUIView(context: Context) -> ARView {
+        print("➡️ makeUIView gestartet")
+
+        // Gerät checken
         guard ARBodyTrackingConfiguration.isSupported else {
-            print("ARBodyTracking is not supported on this device.")
-            return arView
+            print("❌ ARBodyTracking wird auf diesem Gerät nicht unterstützt.")
+            return ARView(frame: .zero)
         }
 
-        // 1) Body Tracking Konfiguration
+        let arView = ARView(frame: .zero)
+
         let config = ARBodyTrackingConfiguration()
         config.isLightEstimationEnabled = true
 
-        // 2) Session starten
         arView.session.delegate = context.coordinator
         arView.session.run(config)
 
         return arView
     }
 
-    func updateUIView(_ uiView: ARView, context: Context) {}
+    func updateUIView(_ uiView: ARView, context: Context) {
+        // hier geben wir den Start/Stop-Status in den Coordinator
+        context.coordinator.isRecording = isRecording
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    // MARK: - Coordinator = ARSessionDelegate
+    // MARK: - Coordinator
+
     class Coordinator: NSObject, ARSessionDelegate {
 
-        /// Hier speichern wir alle Frames
+        var isRecording: Bool = false
+
+        // hier landen die aufgezeichneten Frames
         var frames: [[String: SIMD3<Float>]] = []
 
-        /// Optional: nur bestimmte Joints speichern
+        // nur ausgewählte Joints
         let interesting: Set<String> = [
             "hips_joint",
             "left_upLeg_joint", "left_leg_joint", "left_foot_joint",
@@ -56,33 +87,27 @@ struct ARViewContainer: UIViewRepresentable {
         ]
 
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+            // wenn nicht aufgenommen werden soll → gar nichts tun
+            guard isRecording else { return }
 
             for anchor in anchors {
                 guard let bodyAnchor = anchor as? ARBodyAnchor else { continue }
 
-                let skeleton     = bodyAnchor.skeleton
-                let definition   = skeleton.definition
-                let jointNames   = definition.jointNames                 // [String]
-                let transforms   = skeleton.jointModelTransforms         // [simd_float4x4]
+                let skeleton   = bodyAnchor.skeleton
+                let names      = skeleton.definition.jointNames
+                let transforms = skeleton.jointModelTransforms
 
-                var jointDict: [String: SIMD3<Float>] = [:]
+                var joints: [String: SIMD3<Float>] = [:]
 
-                // Alle Joints (oder gefilterte) durchgehen
-                for (index, name) in jointNames.enumerated() {
-
-                    // Falls du ALLE Joints willst -> Zeile entfernen
+                for (i, name) in names.enumerated() {
                     guard interesting.contains(name) else { continue }
 
-                    let t = transforms[index]
-                    let col = t.columns.3
-                    let pos = SIMD3<Float>(col.x, col.y, col.z)
-
-                    jointDict[name] = pos
+                    let t = transforms[i].columns.3
+                    joints[name] = SIMD3(t.x, t.y, t.z)
                 }
 
-                frames.append(jointDict)
-
-                print("Frame \(frames.count): \(jointDict)")
+                frames.append(joints)
+                print("📦 Frame \(frames.count) aufgezeichnet (\(joints.count) Joints)")
             }
         }
     }
