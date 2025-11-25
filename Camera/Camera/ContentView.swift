@@ -17,6 +17,14 @@ struct ContentView: View {
                 Button(action: {
                     isRecording.toggle()
                     print("🎬 Recording ist jetzt: \(isRecording)")
+
+                    // Wenn gerade gestoppt → Ausgabe aller Koordinaten
+                    if !isRecording {
+                        // Den Coordinator holen und printRecordedFrames aufrufen:
+                        if let arView = UIApplication.shared.windows.first?.rootViewController?.view as? ARView {
+                            // Falls du später mal speichern willst, bauen wir das anders um.
+                        }
+                    }
                 }) {
                     Text(isRecording ? "Stop" : "Start")
                         .font(.title2)
@@ -110,5 +118,21 @@ struct ARViewContainer: UIViewRepresentable {
                 print("📦 Frame \(frames.count) aufgezeichnet (\(joints.count) Joints)")
             }
         }
+        
+        func printRecordedFrames() {
+            print("\n==================== AUFGEZEICHNETE KOORDINATEN ====================")
+            for (frameIndex, joints) in frames.enumerated() {
+                print("Frame \(frameIndex + 1):")
+                for (jointName, pos) in joints {
+                    let x = String(format: "%.4f", pos.x)
+                    let y = String(format: "%.4f", pos.y)
+                    let z = String(format: "%.4f", pos.z)
+                    print("  \(jointName):  x=\(x), y=\(y), z=\(z)")
+                }
+                print("------------------------------------------------------------------")
+            }
+            print("==================== ENDE DER AUFZEICHNUNG ======================\n")
+        }
+
     }
 }
