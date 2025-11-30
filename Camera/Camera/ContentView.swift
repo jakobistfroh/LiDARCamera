@@ -1,31 +1,16 @@
 import SwiftUI
-import ARKit
-import RealityKit
 
 struct ContentView: View {
-    @State private var isRecording = false   // Start/Stop-Status
+    @State private var isRecording = false
 
     var body: some View {
         ZStack {
-            // AR-Ansicht
             ARViewContainer(isRecording: $isRecording)
                 .edgesIgnoringSafeArea(.all)
 
-            // Overlay: Start/Stop-Button
             VStack {
                 Spacer()
-                Button(action: {
-                    isRecording.toggle()
-                    print("🎬 Recording ist jetzt: \(isRecording)")
-
-                    // Wenn gerade gestoppt → Ausgabe aller Koordinaten
-                    if !isRecording {
-                        // Den Coordinator holen und printRecordedFrames aufrufen:
-                        if let arView = UIApplication.shared.windows.first?.rootViewController?.view as? ARView {
-                            // Falls du später mal speichern willst, bauen wir das anders um.
-                        }
-                    }
-                }) {
+                Button(action: { toggleRecording() }) {
                     Text(isRecording ? "Stop" : "Start")
                         .font(.title2)
                         .padding()
@@ -38,101 +23,27 @@ struct ContentView: View {
             }
         }
     }
-}
 
-struct ARViewContainer: UIViewRepresentable {
+    private func toggleRecording() {
+        let newValue = !isRecording
+        isRecording = newValue
+        print("🎬 Recording ist jetzt: \(newValue)")
 
-    @Binding var isRecording: Bool
+        if newValue {
+            // ▶️ Start: Frames leeren + Video starten
+            ARSessionManager.shared.reset()
+            ScreenRecorder.shared.startRecording()
+        } else {
+            // ⏹ Stop: Video stoppen → JSON → ZIP → teilen
+            ScreenRecorder.shared.stopRecording { videoURL in
+                guard let videoURL = videoURL else { return }
 
-    func makeUIView(context: Context) -> ARView {
-        print("➡️ makeUIView gestartet")
+                let jsonURL = JSONExporter.save(frames: ARSessionManager.shared.frames)
 
-        // Gerät checken
-        guard ARBodyTrackingConfiguration.isSupported else {
-            print("❌ ARBodyTracking wird auf diesem Gerät nicht unterstützt.")
-            return ARView(frame: .zero)
-        }
-
-        let arView = ARView(frame: .zero)
-
-        let config = ARBodyTrackingConfiguration()
-        config.isLightEstimationEnabled = true
-
-        arView.session.delegate = context.coordinator
-        arView.session.run(config)
-
-        return arView
-    }
-
-    func updateUIView(_ uiView: ARView, context: Context) {
-        // hier geben wir den Start/Stop-Status in den Coordinator
-        context.coordinator.isRecording = isRecording
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    // MARK: - Coordinator
-
-    class Coordinator: NSObject, ARSessionDelegate {
-
-        var isRecording: Bool = false
-
-        // hier landen die aufgezeichneten Frames
-        var frames: [[String: SIMD3<Float>]] = []
-
-        // nur ausgewählte Joints
-        let interesting: Set<String> = [
-            "hips_joint",
-            "left_upLeg_joint", "left_leg_joint", "left_foot_joint",
-            "right_upLeg_joint", "right_leg_joint", "right_foot_joint",
-            "spine_3_joint",
-            "neck_1_joint",
-            "head_joint",
-            "left_shoulder_1_joint", "left_arm_joint", "left_forearm_joint", "left_hand_joint",
-            "right_shoulder_1_joint", "right_arm_joint", "right_forearm_joint", "right_hand_joint"
-        ]
-
-        func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
-            // wenn nicht aufgenommen werden soll → gar nichts tun
-            guard isRecording else { return }
-
-            for anchor in anchors {
-                guard let bodyAnchor = anchor as? ARBodyAnchor else { continue }
-
-                let skeleton   = bodyAnchor.skeleton
-                let names      = skeleton.definition.jointNames
-                let transforms = skeleton.jointModelTransforms
-
-                var joints: [String: SIMD3<Float>] = [:]
-
-                for (i, name) in names.enumerated() {
-                    guard interesting.contains(name) else { continue }
-
-                    let t = transforms[i].columns.3
-                    joints[name] = SIMD3(t.x, t.y, t.z)
+                if let zipURL = ZipExporter.createZip(videoURL: videoURL, jsonURL: jsonURL) {
+                    ShareSheet.present(file: zipURL)
                 }
-
-                frames.append(joints)
-                print("📦 Frame \(frames.count) aufgezeichnet (\(joints.count) Joints)")
             }
         }
-        
-        func printRecordedFrames() {
-            print("\n==================== AUFGEZEICHNETE KOORDINATEN ====================")
-            for (frameIndex, joints) in frames.enumerated() {
-                print("Frame \(frameIndex + 1):")
-                for (jointName, pos) in joints {
-                    let x = String(format: "%.4f", pos.x)
-                    let y = String(format: "%.4f", pos.y)
-                    let z = String(format: "%.4f", pos.z)
-                    print("  \(jointName):  x=\(x), y=\(y), z=\(z)")
-                }
-                print("------------------------------------------------------------------")
-            }
-            print("==================== ENDE DER AUFZEICHNUNG ======================\n")
-        }
-
     }
 }

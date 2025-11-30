@@ -1,10 +1,3 @@
-//
-//  StartView.swift
-//  Camera
-//
-//  Created by Carla Frohwein on 25.11.25.
-//
-
 import SwiftUI
 
 struct StartView: View {
