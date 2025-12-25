@@ -2,47 +2,40 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var isRecording = false
+    @State private var exportURL: URL? = nil
+    @State private var showShareSheet = false
 
     var body: some View {
-        ZStack {
-            ARViewContainer(isRecording: $isRecording)
-                .edgesIgnoringSafeArea(.all)
+        ZStack(alignment: .bottom) {
+            ARViewContainer(
+                isRecording: $isRecording,
+                onExportReady: { url in
+                    exportURL = url
+                    showShareSheet = true
+                }
+            )
+            .edgesIgnoringSafeArea(.all)
 
-            VStack {
-                Spacer()
-                Button(action: { toggleRecording() }) {
-                    Text(isRecording ? "Stop" : "Start")
-                        .font(.title2)
-                        .padding()
-                        .frame(width: 160)
-                        .background(isRecording ? Color.red : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(14)
-                        .padding(.bottom, 40)
+            Button(isRecording ? "Stop" : "Start") {
+                if isRecording {
+                    isRecording = false
+                } else {
+                    ARSessionManager.shared.reset()
+                    isRecording = true
                 }
             }
+            .padding()
+            .background(.blue)
+            .foregroundColor(.white)
+            .cornerRadius(12)
+            .padding(.bottom, 30)
         }
-    }
-
-    private func toggleRecording() {
-        let newValue = !isRecording
-        isRecording = newValue
-        print("🎬 Recording ist jetzt: \(newValue)")
-
-        if newValue {
-            // ▶️ Start: Frames leeren + Video starten
-            ARSessionManager.shared.reset()
-            ScreenRecorder.shared.startRecording()
-        } else {
-            // ⏹ Stop: Video stoppen → JSON → ZIP → teilen
-            ScreenRecorder.shared.stopRecording { videoURL in
-                guard let videoURL = videoURL else { return }
-
-                let jsonURL = JSONExporter.save(frames: ARSessionManager.shared.frames)
-
-                if let zipURL = ZipExporter.createZip(videoURL: videoURL, jsonURL: jsonURL) {
-                    ShareSheet.present(file: zipURL)
-                }
+        .sheet(isPresented: $showShareSheet) {
+            if let exportURL = exportURL {
+                ShareSheet(items: [exportURL])
+            } else {
+                Text("Kein Export vorhanden.")
+                    .padding()
             }
         }
     }

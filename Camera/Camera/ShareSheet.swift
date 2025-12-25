@@ -1,23 +1,20 @@
+//
+//  ShareSheet.swift
+//  testen
+//
+//  Created by Carla Frohwein on 25.12.25.
+//
+
+
 import SwiftUI
 import UIKit
 
-struct ShareSheet {
-    static func present(file: URL) {
-        let activityVC = UIActivityViewController(
-            activityItems: [file],
-            applicationActivities: nil
-        )
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
 
-        DispatchQueue.main.async {
-            guard let root = UIApplication.shared
-                .connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .flatMap({ $0.windows })
-                .first(where: { $0.isKeyWindow })?
-                .rootViewController else {
-                    return
-            }
-            root.present(activityVC, animated: true)
-        }
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

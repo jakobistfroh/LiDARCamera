@@ -1,16 +1,16 @@
-import SwiftUI
+ import SwiftUI
 import ARKit
 import RealityKit
+import simd
 
 struct ARViewContainer: UIViewRepresentable {
 
     @Binding var isRecording: Bool
-
+    
+    let onExportReady: (URL) -> Void
     func makeUIView(context: Context) -> ARView {
-        print("➡️ makeUIView gestartet")
-
         guard ARBodyTrackingConfiguration.isSupported else {
-            print("❌ ARBodyTracking wird auf diesem Gerät nicht unterstützt.")
+            print("❌ ARBodyTracking nicht unterstützt.")
             return ARView(frame: .zero)
         }
 
@@ -26,16 +26,26 @@ struct ARViewContainer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
-        context.coordinator.isRecording = isRecording
+        // Start/Stop State an Coordinator geben
+        context.coordinator.setRecording(isRecording)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(onExportReady: onExportReady)
     }
 
-    class Coordinator: NSObject, ARSessionDelegate {
+    final class Coordinator: NSObject, ARSessionDelegate {
 
-        var isRecording: Bool = false
+        private(set) var isRecording: Bool = false
+        private let onExportReady: (URL) -> Void
+
+        private let videoRecorder = ARFrameVideoRecorder()
+        private var stopping = false
+        
+        init(onExportReady: @escaping (URL) -> Void) {
+                self.onExportReady = onExportReady
+            }
+
 
         let interesting: Set<String> = [
             "hips_joint",
@@ -48,12 +58,58 @@ struct ARViewContainer: UIViewRepresentable {
             "right_shoulder_1_joint", "right_arm_joint", "right_forearm_joint", "right_hand_joint"
         ]
 
-        func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+        func setRecording(_ newValue: Bool) {
+            if newValue == isRecording { return }
+            isRecording = newValue
+
+            if isRecording {
+                // Start: Session-Zeit starten
+                if ARSessionManager.shared.startTime == nil {
+                    ARSessionManager.shared.startTime = Date().timeIntervalSince1970
+                }
+                stopping = false
+                print("▶️ Recording ON")
+            } else {
+                // Stop: Video stoppen + ZIP exportieren
+                guard !stopping else { return }
+                stopping = true
+                print("⏹ Recording OFF -> stopping video + exporting zip")
+
+                videoRecorder.stop { videoURL in
+                    let zipURL = RecordingExporter.export(
+                        frames: ARSessionManager.shared.frames,
+                        videoURL: videoURL
+                    )
+                    DispatchQueue.main.async {
+                        ARSessionManager.shared.exportZIPURL = zipURL
+                        self.onExportReady(zipURL)
+                        self.stopping = false
+                        
+                    }
+                }
+            }
+        }
+
+        // 1) Video: jedes Frame liefert capturedImage + timestamp
+        func session(_ session: ARSession, didUpdate frame: ARFrame) {
             guard isRecording else { return }
 
-            if ARSessionManager.shared.startTime == nil {
-                ARSessionManager.shared.startTime = Date().timeIntervalSince1970
+            // Video-Recorder beim ersten Frame starten
+            if !videoRecorder.isRecording {
+                do {
+                    try videoRecorder.start(with: frame.capturedImage)
+                } catch {
+                    print("❌ Video start failed: \(error)")
+                }
             }
+
+            // frame.timestamp ist perfekt synchron zu AR
+            videoRecorder.append(pixelBuffer: frame.capturedImage, timestampSeconds: frame.timestamp)
+        }
+
+        // 2) Skeleton: wie vorher (anchors)
+        func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+            guard isRecording else { return }
 
             let now = Date().timeIntervalSince1970
             let time = now - (ARSessionManager.shared.startTime ?? now)
@@ -61,30 +117,38 @@ struct ARViewContainer: UIViewRepresentable {
             for anchor in anchors {
                 guard let bodyAnchor = anchor as? ARBodyAnchor else { continue }
 
-                let skeleton   = bodyAnchor.skeleton
-                let names      = skeleton.definition.jointNames
-                let transforms = skeleton.jointModelTransforms
+                let skeleton        = bodyAnchor.skeleton
+                let names           = skeleton.definition.jointNames
+                let modelTransforms = skeleton.jointModelTransforms
+                let bodyTransform   = bodyAnchor.transform
 
-                var joints: [String: JointPosition] = [:]
+                var joints: [String: JointPosition]      = [:]
+                var worldJoints: [String: JointPosition] = [:]
 
                 for (i, name) in names.enumerated() {
                     guard interesting.contains(name) else { continue }
 
-                    let t = transforms[i].columns.3
-                    joints[name] = JointPosition(x: t.x, y: t.y, z: t.z)
+                    let jointModelTransform = modelTransforms[i]
+
+                    // local (hüft-relativ)
+                    let local = jointModelTransform.columns.3
+                    joints[name] = JointPosition(x: local.x, y: local.y, z: local.z)
+
+                    // world (hintergrund-relativ)
+                    let jointWorldTransform = simd_mul(bodyTransform, jointModelTransform)
+                    let world = jointWorldTransform.columns.3
+                    worldJoints[name] = JointPosition(x: world.x, y: world.y, z: world.z)
                 }
 
                 let frame = PoseFrame(
                     frameIndex: ARSessionManager.shared.frames.count,
                     timestamp: time,
-                    joints: joints
+                    joints: joints,
+                    worldJoints: worldJoints
                 )
 
                 ARSessionManager.shared.frames.append(frame)
-
-                print("📦 Frame \(frame.frameIndex) | t=\(String(format: "%.3f", time))s | \(joints.count) joints")
             }
         }
-
     }
 }
