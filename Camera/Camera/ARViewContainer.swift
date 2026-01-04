@@ -1,3 +1,10 @@
+//
+//  ARViewContainer.swift
+//  testen
+//
+//  Created by Carla Frohwein on 25.12.25.
+//
+
 import SwiftUI
 import ARKit
 import RealityKit
@@ -7,6 +14,8 @@ struct ARViewContainer: UIViewRepresentable {
 
     @Binding var isRecording: Bool
     let onExportReady: (URL) -> Void
+
+    // MARK: - UIViewRepresentable
 
     func makeUIView(context: Context) -> ARView {
         guard ARBodyTrackingConfiguration.isSupported else {
@@ -37,6 +46,8 @@ struct ARViewContainer: UIViewRepresentable {
 
     final class Coordinator: NSObject, ARSessionDelegate {
 
+        // MARK: State
+
         private(set) var isRecording: Bool = false
         private let onExportReady: (URL) -> Void
 
@@ -46,19 +57,6 @@ struct ARViewContainer: UIViewRepresentable {
         init(onExportReady: @escaping (URL) -> Void) {
             self.onExportReady = onExportReady
         }
-
-        let interesting: Set<String> = [
-            "hips_joint",
-            "left_upLeg_joint", "left_leg_joint", "left_foot_joint",
-            "right_upLeg_joint", "right_leg_joint", "right_foot_joint",
-            "spine_3_joint",
-            "neck_1_joint",
-            "head_joint",
-            "left_shoulder_1_joint", "left_arm_joint",
-            "left_forearm_joint", "left_hand_joint",
-            "right_shoulder_1_joint", "right_arm_joint",
-            "right_forearm_joint", "right_hand_joint"
-        ]
 
         // MARK: Recording Control
 
@@ -75,7 +73,7 @@ struct ARViewContainer: UIViewRepresentable {
             } else {
                 guard !stopping else { return }
                 stopping = true
-                print("⏹ Recording OFF -> stopping video + exporting zip")
+                print("⏹ Recording OFF → stopping video + exporting zip")
 
                 videoRecorder.stop { videoURL in
                     let zipURL = RecordingExporter.export(
@@ -91,13 +89,17 @@ struct ARViewContainer: UIViewRepresentable {
             }
         }
 
-        // MARK: Video Frames
+        // MARK: - Video Frames (MP4)
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
             guard isRecording else { return }
 
             if !videoRecorder.isRecording {
-                try? videoRecorder.start(with: frame.capturedImage)
+                do {
+                    try videoRecorder.start(with: frame.capturedImage)
+                } catch {
+                    print("❌ Video start failed: \(error)")
+                }
             }
 
             videoRecorder.append(
@@ -106,7 +108,7 @@ struct ARViewContainer: UIViewRepresentable {
             )
         }
 
-        // MARK: Skeleton Frames
+        // MARK: - Skeleton Frames (JSON)
 
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
             guard isRecording else { return }
@@ -115,35 +117,41 @@ struct ARViewContainer: UIViewRepresentable {
             let time = now - (ARSessionManager.shared.startTime ?? now)
 
             for anchor in anchors {
+
                 guard let bodyAnchor = anchor as? ARBodyAnchor else { continue }
 
                 let skeleton        = bodyAnchor.skeleton
-                let names           = skeleton.definition.jointNames
+                let jointNames      = skeleton.definition.jointNames
                 let modelTransforms = skeleton.jointModelTransforms
                 let bodyTransform   = bodyAnchor.transform
 
-                var worldJoints: [String: JointPosition] = [:]
-                var wallJoints:  [String: JointPosition] = [:]
+                var worldJoints: [Int: JointPosition] = [:]
+                var wallJoints:  [Int: JointPosition] = [:]
 
-                for (i, name) in names.enumerated() {
-                    guard interesting.contains(name) else { continue }
+                for (i, name) in jointNames.enumerated() {
+
+                    guard let jointIndex = JointIndex.arKitNameToIndex[name] else {
+                        continue
+                    }
 
                     let jointModelTransform = modelTransforms[i]
                     let jointWorldTransform = simd_mul(bodyTransform, jointModelTransform)
-                    let world = jointWorldTransform.columns.3
+                    let p = jointWorldTransform.columns.3
 
-                    let worldPos = JointPosition(
-                        x: world.x,
-                        y: world.y,
-                        z: world.z
+                    // 🔹 Confidence (Platzhalter, später verbesserbar)
+                    let confidence: Float = 1.0
+
+                    let joint = JointPosition(
+                        x: p.x,
+                        y: p.y,
+                        z: p.z,
+                        confidence: confidence
                     )
 
-                    worldJoints[name] = worldPos
+                    worldJoints[jointIndex.rawValue] = joint
 
-                    // ⚠️ Platzhalter:
-                    // Aktuell identisch zu worldJoints.
-                    // Wird im nächsten Schritt durch echte Wand-Transformation ersetzt.
-                    wallJoints[name] = worldPos
+                    // ⚠️ Aktuell identisch – echte Wandtransformation folgt
+                    wallJoints[jointIndex.rawValue] = joint
                 }
 
                 let frame = PoseFrame(
