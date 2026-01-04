@@ -1,4 +1,4 @@
- import SwiftUI
+import SwiftUI
 import ARKit
 import RealityKit
 import simd
@@ -6,8 +6,8 @@ import simd
 struct ARViewContainer: UIViewRepresentable {
 
     @Binding var isRecording: Bool
-    
     let onExportReady: (URL) -> Void
+
     func makeUIView(context: Context) -> ARView {
         guard ARBodyTrackingConfiguration.isSupported else {
             print("❌ ARBodyTracking nicht unterstützt.")
@@ -26,13 +26,14 @@ struct ARViewContainer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
-        // Start/Stop State an Coordinator geben
         context.coordinator.setRecording(isRecording)
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onExportReady: onExportReady)
     }
+
+    // MARK: - Coordinator
 
     final class Coordinator: NSObject, ARSessionDelegate {
 
@@ -41,11 +42,10 @@ struct ARViewContainer: UIViewRepresentable {
 
         private let videoRecorder = ARFrameVideoRecorder()
         private var stopping = false
-        
-        init(onExportReady: @escaping (URL) -> Void) {
-                self.onExportReady = onExportReady
-            }
 
+        init(onExportReady: @escaping (URL) -> Void) {
+            self.onExportReady = onExportReady
+        }
 
         let interesting: Set<String> = [
             "hips_joint",
@@ -54,23 +54,25 @@ struct ARViewContainer: UIViewRepresentable {
             "spine_3_joint",
             "neck_1_joint",
             "head_joint",
-            "left_shoulder_1_joint", "left_arm_joint", "left_forearm_joint", "left_hand_joint",
-            "right_shoulder_1_joint", "right_arm_joint", "right_forearm_joint", "right_hand_joint"
+            "left_shoulder_1_joint", "left_arm_joint",
+            "left_forearm_joint", "left_hand_joint",
+            "right_shoulder_1_joint", "right_arm_joint",
+            "right_forearm_joint", "right_hand_joint"
         ]
+
+        // MARK: Recording Control
 
         func setRecording(_ newValue: Bool) {
             if newValue == isRecording { return }
             isRecording = newValue
 
             if isRecording {
-                // Start: Session-Zeit starten
                 if ARSessionManager.shared.startTime == nil {
                     ARSessionManager.shared.startTime = Date().timeIntervalSince1970
                 }
                 stopping = false
                 print("▶️ Recording ON")
             } else {
-                // Stop: Video stoppen + ZIP exportieren
                 guard !stopping else { return }
                 stopping = true
                 print("⏹ Recording OFF -> stopping video + exporting zip")
@@ -84,30 +86,28 @@ struct ARViewContainer: UIViewRepresentable {
                         ARSessionManager.shared.exportZIPURL = zipURL
                         self.onExportReady(zipURL)
                         self.stopping = false
-                        
                     }
                 }
             }
         }
 
-        // 1) Video: jedes Frame liefert capturedImage + timestamp
+        // MARK: Video Frames
+
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
             guard isRecording else { return }
 
-            // Video-Recorder beim ersten Frame starten
             if !videoRecorder.isRecording {
-                do {
-                    try videoRecorder.start(with: frame.capturedImage)
-                } catch {
-                    print("❌ Video start failed: \(error)")
-                }
+                try? videoRecorder.start(with: frame.capturedImage)
             }
 
-            // frame.timestamp ist perfekt synchron zu AR
-            videoRecorder.append(pixelBuffer: frame.capturedImage, timestampSeconds: frame.timestamp)
+            videoRecorder.append(
+                pixelBuffer: frame.capturedImage,
+                timestampSeconds: frame.timestamp
+            )
         }
 
-        // 2) Skeleton: wie vorher (anchors)
+        // MARK: Skeleton Frames
+
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
             guard isRecording else { return }
 
@@ -122,29 +122,35 @@ struct ARViewContainer: UIViewRepresentable {
                 let modelTransforms = skeleton.jointModelTransforms
                 let bodyTransform   = bodyAnchor.transform
 
-                var joints: [String: JointPosition]      = [:]
                 var worldJoints: [String: JointPosition] = [:]
+                var wallJoints:  [String: JointPosition] = [:]
 
                 for (i, name) in names.enumerated() {
                     guard interesting.contains(name) else { continue }
 
                     let jointModelTransform = modelTransforms[i]
-
-                    // local (hüft-relativ)
-                    let local = jointModelTransform.columns.3
-                    joints[name] = JointPosition(x: local.x, y: local.y, z: local.z)
-
-                    // world (hintergrund-relativ)
                     let jointWorldTransform = simd_mul(bodyTransform, jointModelTransform)
                     let world = jointWorldTransform.columns.3
-                    worldJoints[name] = JointPosition(x: world.x, y: world.y, z: world.z)
+
+                    let worldPos = JointPosition(
+                        x: world.x,
+                        y: world.y,
+                        z: world.z
+                    )
+
+                    worldJoints[name] = worldPos
+
+                    // ⚠️ Platzhalter:
+                    // Aktuell identisch zu worldJoints.
+                    // Wird im nächsten Schritt durch echte Wand-Transformation ersetzt.
+                    wallJoints[name] = worldPos
                 }
 
                 let frame = PoseFrame(
                     frameIndex: ARSessionManager.shared.frames.count,
                     timestamp: time,
-                    joints: joints,
-                    worldJoints: worldJoints
+                    worldJoints: worldJoints,
+                    wallJoints: wallJoints
                 )
 
                 ARSessionManager.shared.frames.append(frame)
