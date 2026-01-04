@@ -2,8 +2,6 @@
 //  ARViewContainer.swift
 //  testen
 //
-//  Created by Carla Frohwein on 25.12.25.
-//
 
 import SwiftUI
 import ARKit
@@ -14,8 +12,6 @@ struct ARViewContainer: UIViewRepresentable {
 
     @Binding var isRecording: Bool
     let onExportReady: (URL) -> Void
-
-    // MARK: - UIViewRepresentable
 
     func makeUIView(context: Context) -> ARView {
         guard ARBodyTrackingConfiguration.isSupported else {
@@ -46,8 +42,6 @@ struct ARViewContainer: UIViewRepresentable {
 
     final class Coordinator: NSObject, ARSessionDelegate {
 
-        // MARK: State
-
         private(set) var isRecording: Bool = false
         private let onExportReady: (URL) -> Void
 
@@ -65,9 +59,7 @@ struct ARViewContainer: UIViewRepresentable {
             isRecording = newValue
 
             if isRecording {
-                if ARSessionManager.shared.startTime == nil {
-                    ARSessionManager.shared.startTime = Date().timeIntervalSince1970
-                }
+                ARSessionManager.shared.startTime = Date().timeIntervalSince1970
                 stopping = false
                 print("▶️ Recording ON")
             } else {
@@ -81,7 +73,6 @@ struct ARViewContainer: UIViewRepresentable {
                         videoURL: videoURL
                     )
                     DispatchQueue.main.async {
-                        ARSessionManager.shared.exportZIPURL = zipURL
                         self.onExportReady(zipURL)
                         self.stopping = false
                     }
@@ -89,17 +80,13 @@ struct ARViewContainer: UIViewRepresentable {
             }
         }
 
-        // MARK: - Video Frames (MP4)
+        // MARK: Video Frames
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
             guard isRecording else { return }
 
             if !videoRecorder.isRecording {
-                do {
-                    try videoRecorder.start(with: frame.capturedImage)
-                } catch {
-                    print("❌ Video start failed: \(error)")
-                }
+                try? videoRecorder.start(with: frame.capturedImage)
             }
 
             videoRecorder.append(
@@ -108,16 +95,15 @@ struct ARViewContainer: UIViewRepresentable {
             )
         }
 
-        // MARK: - Skeleton Frames (JSON)
+        // MARK: Skeleton Frames
 
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
             guard isRecording else { return }
 
-            let now = Date().timeIntervalSince1970
-            let time = now - (ARSessionManager.shared.startTime ?? now)
+            let time = Date().timeIntervalSince1970
+                - (ARSessionManager.shared.startTime ?? 0)
 
             for anchor in anchors {
-
                 guard let bodyAnchor = anchor as? ARBodyAnchor else { continue }
 
                 let skeleton        = bodyAnchor.skeleton
@@ -138,20 +124,14 @@ struct ARViewContainer: UIViewRepresentable {
                     let jointWorldTransform = simd_mul(bodyTransform, jointModelTransform)
                     let p = jointWorldTransform.columns.3
 
-                    // 🔹 Confidence (Platzhalter, später verbesserbar)
-                    let confidence: Float = 1.0
-
                     let joint = JointPosition(
                         x: p.x,
                         y: p.y,
-                        z: p.z,
-                        confidence: confidence
+                        z: p.z
                     )
 
                     worldJoints[jointIndex.rawValue] = joint
-
-                    // ⚠️ Aktuell identisch – echte Wandtransformation folgt
-                    wallJoints[jointIndex.rawValue] = joint
+                    wallJoints[jointIndex.rawValue]  = joint // Platzhalter
                 }
 
                 let frame = PoseFrame(
