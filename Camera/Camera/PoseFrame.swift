@@ -10,10 +10,10 @@ struct PoseFrame: Codable {
     let frameIndex: Int
     let timestamp: Double
 
-    /// ARKit-Weltkoordinaten (Debug / Reproduzierbarkeit)
+    /// ARKit-Weltkoordinaten (Rohdaten)
     let worldJoints: [Int: JointPosition]
 
-    /// Wandkoordinaten (ANALYSE)
+    /// Wandkoordinaten (Analyse-relevant)
     let wallJoints: [Int: JointPosition]
 }
 
