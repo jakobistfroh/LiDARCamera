@@ -2,13 +2,17 @@
 //  JointPosition.swift
 //  testen
 //
-//  Created by Carla Frohwein on 25.12.25.
-//
 
 import Foundation
 
+/// Kompakte Repräsentation eines Gelenks
 struct JointPosition: Codable {
+
+    /// Position (Meter)
     let x: Float
     let y: Float
     let z: Float
+
+    /// Genauigkeit / Zuverlässigkeit (0.0 – 1.0)
+    let confidence: Float
 }
