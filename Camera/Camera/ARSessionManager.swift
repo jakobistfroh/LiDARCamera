@@ -5,10 +5,10 @@
 //  Created by Carla Frohwein on 25.12.25.
 //
 
-
 import Foundation
 
 final class ARSessionManager {
+
     static let shared = ARSessionManager()
     private init() {}
 
