@@ -2,8 +2,6 @@
 //  PoseFrame.swift
 //  testen
 //
-//  Created by Carla Frohwein on 25.12.25.
-//
 
 import Foundation
 
@@ -12,11 +10,11 @@ struct PoseFrame: Codable {
     let frameIndex: Int
     let timestamp: Double
 
-    /// Rohdaten aus ARKit (Kamera-/Weltkoordinaten)
-    let worldJoints: [String: JointPosition]
+    /// ARKit-Weltkoordinaten (Debug / Reproduzierbarkeit)
+    let worldJoints: [Int: JointPosition]
 
-    /// Analyse-relevante Koordinaten (wandfix)
-    let wallJoints: [String: JointPosition]
+    /// Wandkoordinaten (ANALYSE)
+    let wallJoints: [Int: JointPosition]
 }
 
 struct PoseRecording: Codable {
