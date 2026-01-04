@@ -12,7 +12,7 @@ import SwiftUI
 struct testenApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            StartView()
         }
     }
 }
