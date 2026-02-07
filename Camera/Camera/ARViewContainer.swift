@@ -12,6 +12,7 @@ struct ARViewContainer: UIViewRepresentable {
 
     @Binding var isRecording: Bool
     @Binding var isCalibrated: Bool
+    @Binding var calibrationRequestID: Int
 
     let onExportReady: (URL) -> Void
 
@@ -29,12 +30,12 @@ struct ARViewContainer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
+        context.coordinator.setCalibrationRequestID(calibrationRequestID)
         context.coordinator.setRecording(isRecording)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isCalibrated: $isCalibrated,
-                    onExportReady: onExportReady)
+        Coordinator(isCalibrated: $isCalibrated, onExportReady: onExportReady)
     }
 
     // MARK: - Coordinator
@@ -48,6 +49,7 @@ struct ARViewContainer: UIViewRepresentable {
 
         private let videoRecorder = ARFrameVideoRecorder()
         private var stopping = false
+        private var calibrationRequestID = 0
         private(set) var isRecording = false
 
         init(isCalibrated: Binding<Bool>,
@@ -58,7 +60,13 @@ struct ARViewContainer: UIViewRepresentable {
 
         // MARK: - Calibration
 
-        func calibrateWall() {
+        func setCalibrationRequestID(_ newID: Int) {
+            guard newID != calibrationRequestID else { return }
+            calibrationRequestID = newID
+            calibrateWall()
+        }
+
+        private func calibrateWall() {
             guard let arView else { return }
 
             let center = CGPoint(
@@ -73,7 +81,7 @@ struct ARViewContainer: UIViewRepresentable {
             )
 
             guard let result = results.first else {
-                print("❌ Kalibrierung fehlgeschlagen")
+                print("Kalibrierung fehlgeschlagen")
                 return
             }
 
@@ -83,52 +91,73 @@ struct ARViewContainer: UIViewRepresentable {
             ARSessionManager.shared.wallOriginWorld = origin
             isCalibrated = true
 
-            print("✅ Wand kalibriert bei:", origin)
+            print("Wand kalibriert bei:", origin)
         }
 
         // MARK: - Recording
 
         func setRecording(_ newValue: Bool) {
             guard isCalibrated else { return }
-            if newValue == isRecording { return }
+            guard newValue != isRecording else { return }
             isRecording = newValue
 
             if isRecording {
                 ARSessionManager.shared.startTime = Date().timeIntervalSince1970
-                print("▶️ Recording ON")
-            } else {
-                guard !stopping else { return }
-                stopping = true
+                print("Recording ON")
+                return
+            }
 
-                if videoRecorder.isRecording {
-                    videoRecorder.stop { videoURL in
-                        let zipURL = RecordingExporter.export(
-                            frames: ARSessionManager.shared.frames,
-                            videoURL: videoURL
-                        )
-                        DispatchQueue.main.async {
-                            self.onExportReady(zipURL)
-                            self.stopping = false
-                        }
-                    }
-                } else {
-                    let zipURL = RecordingExporter.export(
-                        frames: ARSessionManager.shared.frames,
-                        videoURL: nil
-                    )
-                    DispatchQueue.main.async {
-                        self.onExportReady(zipURL)
-                        self.stopping = false
-                    }
+            guard !stopping else { return }
+            stopping = true
+
+            if videoRecorder.isRecording {
+                videoRecorder.stop { [weak self] videoURL in
+                    self?.finishExport(videoURL: videoURL)
+                }
+            } else {
+                finishExport(videoURL: nil)
+            }
+        }
+
+        private func finishExport(videoURL: URL?) {
+            do {
+                let zipURL = try RecordingExporter.export(
+                    frames: ARSessionManager.shared.frames,
+                    videoURL: videoURL
+                )
+                DispatchQueue.main.async {
+                    self.onExportReady(zipURL)
+                    self.stopping = false
+                }
+            } catch {
+                print("Export fehlgeschlagen: \(error)")
+                DispatchQueue.main.async {
+                    self.stopping = false
                 }
             }
         }
 
         // MARK: - ARSessionDelegate
 
+        func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            guard isRecording else { return }
+
+            let timestamp = Date().timeIntervalSince1970 - (ARSessionManager.shared.startTime ?? 0)
+
+            if !videoRecorder.isRecording {
+                do {
+                    try videoRecorder.start(with: frame.capturedImage)
+                } catch {
+                    print("Videoaufnahme konnte nicht gestartet werden: \(error)")
+                    return
+                }
+            }
+
+            videoRecorder.append(pixelBuffer: frame.capturedImage, timestampSeconds: timestamp)
+        }
+
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
-            guard isRecording,
-                  let origin = ARSessionManager.shared.wallOriginWorld else { return }
+            guard isRecording, let origin = ARSessionManager.shared.wallOriginWorld else { return }
 
             let time = Date().timeIntervalSince1970
                 - (ARSessionManager.shared.startTime ?? 0)
@@ -151,12 +180,8 @@ struct ARViewContainer: UIViewRepresentable {
                     let world = SIMD3<Float>(p.x, p.y, p.z)
                     let wall = world - origin
 
-                    worldJoints[idx.rawValue] = JointPosition(
-                        x: world.x, y: world.y, z: world.z
-                    )
-                    wallJoints[idx.rawValue] = JointPosition(
-                        x: wall.x, y: wall.y, z: wall.z
-                    )
+                    worldJoints[idx.rawValue] = JointPosition(x: world.x, y: world.y, z: world.z)
+                    wallJoints[idx.rawValue] = JointPosition(x: wall.x, y: wall.y, z: wall.z)
                 }
 
                 ARSessionManager.shared.frames.append(

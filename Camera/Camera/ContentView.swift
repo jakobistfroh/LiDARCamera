@@ -4,6 +4,7 @@ struct ContentView: View {
 
     @State private var isRecording = false
     @State private var isCalibrated = false
+    @State private var calibrationRequestID = 0
     @State private var exportURL: URL?
     @State private var showShareSheet = false
 
@@ -13,6 +14,7 @@ struct ContentView: View {
             ARViewContainer(
                 isRecording: $isRecording,
                 isCalibrated: $isCalibrated,
+                calibrationRequestID: $calibrationRequestID,
                 onExportReady: { url in
                     exportURL = url
                     showShareSheet = true
@@ -23,10 +25,7 @@ struct ContentView: View {
             VStack(spacing: 12) {
 
                 Button("Kalibrieren") {
-                    NotificationCenter.default.post(
-                        name: .init("CalibrateWall"),
-                        object: nil
-                    )
+                    calibrationRequestID += 1
                 }
                 .disabled(isCalibrated)
                 .padding()
@@ -38,7 +37,7 @@ struct ContentView: View {
                     if isRecording {
                         isRecording = false
                     } else {
-                        ARSessionManager.shared.reset()
+                        ARSessionManager.shared.reset(keepCalibration: true)
                         isRecording = true
                     }
                 }

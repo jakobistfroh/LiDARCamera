@@ -23,11 +23,13 @@ final class ARSessionManager {
 
     var exportZIPURL: URL?
 
-    func reset() {
+    func reset(keepCalibration: Bool = false) {
         frames.removeAll()
         startTime = nil
-        wallOriginWorld = nil
+        if !keepCalibration {
+            wallOriginWorld = nil
+        }
         exportZIPURL = nil
-        print("🔄 ARSessionManager: Reset")
+        print("ARSessionManager: Reset")
     }
 }
