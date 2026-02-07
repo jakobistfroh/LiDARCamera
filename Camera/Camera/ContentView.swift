@@ -23,6 +23,13 @@ struct ContentView: View {
             .edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 12) {
+                Text(isCalibrated ? "Wand kalibriert" : "Bitte zuerst kalibrieren")
+                    .font(.headline)
+                    .foregroundColor(isCalibrated ? .green : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.45))
+                    .cornerRadius(10)
 
                 Button("Kalibrieren") {
                     calibrationRequestID += 1

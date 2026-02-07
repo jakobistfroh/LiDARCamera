@@ -50,6 +50,7 @@ struct ARViewContainer: UIViewRepresentable {
         private let videoRecorder = ARFrameVideoRecorder()
         private var stopping = false
         private var calibrationRequestID = 0
+        private var calibrationAnchor: AnchorEntity?
         private(set) var isRecording = false
 
         init(isCalibrated: Binding<Bool>,
@@ -89,15 +90,62 @@ struct ARViewContainer: UIViewRepresentable {
             let origin = SIMD3<Float>(t.x, t.y, t.z)
 
             ARSessionManager.shared.wallOriginWorld = origin
-            isCalibrated = true
+            DispatchQueue.main.async {
+                self.isCalibrated = true
+            }
+            addCalibrationMarker(at: origin)
 
             print("Wand kalibriert bei:", origin)
+        }
+
+        private func addCalibrationMarker(at worldPosition: SIMD3<Float>) {
+            guard let arView else { return }
+
+            if let existing = calibrationAnchor {
+                arView.scene.removeAnchor(existing)
+            }
+
+            let anchor = AnchorEntity(world: worldPosition)
+            calibrationAnchor = anchor
+
+            let material = SimpleMaterial(color: .orange, roughness: 0.3, isMetallic: false)
+
+            let shaft = ModelEntity(
+                mesh: .generateBox(size: [0.008, 0.12, 0.008]),
+                materials: [material]
+            )
+            shaft.position = [0, 0.06, 0]
+
+            let headLeft = ModelEntity(
+                mesh: .generateBox(size: [0.006, 0.04, 0.006]),
+                materials: [material]
+            )
+            headLeft.position = [-0.012, 0.105, 0]
+            headLeft.orientation = simd_quatf(angle: .pi / 4, axis: [0, 0, 1])
+
+            let headRight = ModelEntity(
+                mesh: .generateBox(size: [0.006, 0.04, 0.006]),
+                materials: [material]
+            )
+            headRight.position = [0.012, 0.105, 0]
+            headRight.orientation = simd_quatf(angle: -.pi / 4, axis: [0, 0, 1])
+
+            anchor.addChild(shaft)
+            anchor.addChild(headLeft)
+            anchor.addChild(headRight)
+            arView.scene.addAnchor(anchor)
         }
 
         // MARK: - Recording
 
         func setRecording(_ newValue: Bool) {
-            guard isCalibrated else { return }
+            if ARSessionManager.shared.isWallCalibrated && !isCalibrated {
+                DispatchQueue.main.async {
+                    self.isCalibrated = true
+                }
+            }
+
+            guard ARSessionManager.shared.isWallCalibrated else { return }
             guard newValue != isRecording else { return }
             isRecording = newValue
 
