@@ -27,9 +27,9 @@ final class ARFrameVideoRecorder {
         let width = CVPixelBufferGetWidth(firstPixelBuffer)
         let height = CVPixelBufferGetHeight(firstPixelBuffer)
 
-        // 👉 Auflösung halbieren (extrem wirksam)
-        let targetWidth = width / 2
-        let targetHeight = height / 2
+        // Keep source dimensions to avoid pixel-buffer size mismatch on append.
+        let targetWidth = width
+        let targetHeight = height
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording_\(Int(Date().timeIntervalSince1970)).mp4")
@@ -42,7 +42,7 @@ final class ARFrameVideoRecorder {
             AVVideoWidthKey: targetWidth,
             AVVideoHeightKey: targetHeight,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 6_000_000, // ✅ 6 Mbps
+                AVVideoAverageBitRateKey: 6_000_000,
                 AVVideoExpectedSourceFrameRateKey: 30,
                 AVVideoMaxKeyFrameIntervalKey: 30,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
@@ -78,7 +78,7 @@ final class ARFrameVideoRecorder {
         self.adaptor = adaptor
         self.didStartSession = false
 
-        print("🎥 Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight)")
+        print("Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight)")
     }
 
     func append(pixelBuffer: CVPixelBuffer, timestampSeconds: Double) {
@@ -93,7 +93,10 @@ final class ARFrameVideoRecorder {
         }
 
         guard input.isReadyForMoreMediaData else { return }
-        adaptor.append(pixelBuffer, withPresentationTime: time)
+        let success = adaptor.append(pixelBuffer, withPresentationTime: time)
+        if !success {
+            print("Frame append failed, writer status: \(writer.status.rawValue)")
+        }
     }
 
     func stop(completion: @escaping (URL?) -> Void) {
@@ -111,7 +114,7 @@ final class ARFrameVideoRecorder {
             self?.adaptor = nil
             self?.didStartSession = false
 
-            print("🎥 Frame recorder stopped: \(url?.lastPathComponent ?? "nil")")
+            print("Frame recorder stopped: \(url?.lastPathComponent ?? "nil")")
             completion(url)
         }
     }
