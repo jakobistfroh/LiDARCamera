@@ -31,12 +31,12 @@ struct ContentView: View {
                     .background(Color.black.opacity(0.45))
                     .cornerRadius(10)
 
-                Button("Kalibrieren") {
+                Button(isCalibrated ? "Neu kalibrieren" : "Kalibrieren") {
                     calibrationRequestID += 1
                 }
-                .disabled(isCalibrated)
+                .disabled(isRecording)
                 .padding()
-                .background(isCalibrated ? .gray : .orange)
+                .background(isRecording ? .gray : .orange)
                 .foregroundColor(.white)
                 .cornerRadius(10)
 

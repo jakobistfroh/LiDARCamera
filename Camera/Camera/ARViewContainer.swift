@@ -151,6 +151,9 @@ struct ARViewContainer: UIViewRepresentable {
 
             if isRecording {
                 ARSessionManager.shared.startTime = Date().timeIntervalSince1970
+                if let currentFrame = arView?.session.currentFrame {
+                    startVideoRecordingIfNeeded(with: currentFrame, timestamp: 0)
+                }
                 print("Recording ON")
                 return
             }
@@ -191,7 +194,10 @@ struct ARViewContainer: UIViewRepresentable {
             guard isRecording else { return }
 
             let timestamp = Date().timeIntervalSince1970 - (ARSessionManager.shared.startTime ?? 0)
+            startVideoRecordingIfNeeded(with: frame, timestamp: timestamp)
+        }
 
+        private func startVideoRecordingIfNeeded(with frame: ARFrame, timestamp: Double) {
             if !videoRecorder.isRecording {
                 do {
                     try videoRecorder.start(with: frame.capturedImage)
