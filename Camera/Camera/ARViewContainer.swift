@@ -51,6 +51,7 @@ struct ARViewContainer: UIViewRepresentable {
         private var stopping = false
         private var calibrationRequestID = 0
         private var calibrationAnchor: AnchorEntity?
+        private var recordingStartFrameTimestamp: TimeInterval?
         private(set) var isRecording = false
 
         init(isCalibrated: Binding<Bool>,
@@ -151,7 +152,9 @@ struct ARViewContainer: UIViewRepresentable {
 
             if isRecording {
                 ARSessionManager.shared.startTime = Date().timeIntervalSince1970
+                recordingStartFrameTimestamp = nil
                 if let currentFrame = arView?.session.currentFrame {
+                    recordingStartFrameTimestamp = currentFrame.timestamp
                     startVideoRecordingIfNeeded(with: currentFrame, timestamp: 0)
                 }
                 print("Recording ON")
@@ -193,7 +196,10 @@ struct ARViewContainer: UIViewRepresentable {
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
             guard isRecording else { return }
 
-            let timestamp = Date().timeIntervalSince1970 - (ARSessionManager.shared.startTime ?? 0)
+            if recordingStartFrameTimestamp == nil {
+                recordingStartFrameTimestamp = frame.timestamp
+            }
+            let timestamp = max(0, frame.timestamp - (recordingStartFrameTimestamp ?? frame.timestamp))
             startVideoRecordingIfNeeded(with: frame, timestamp: timestamp)
         }
 
@@ -213,8 +219,13 @@ struct ARViewContainer: UIViewRepresentable {
         func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
             guard isRecording, let origin = ARSessionManager.shared.wallOriginWorld else { return }
 
-            let time = Date().timeIntervalSince1970
-                - (ARSessionManager.shared.startTime ?? 0)
+            let time: TimeInterval
+            if let startFrameTimestamp = recordingStartFrameTimestamp,
+               let currentFrameTimestamp = session.currentFrame?.timestamp {
+                time = max(0, currentFrameTimestamp - startFrameTimestamp)
+            } else {
+                time = Date().timeIntervalSince1970 - (ARSessionManager.shared.startTime ?? 0)
+            }
 
             for anchor in anchors {
                 guard let body = anchor as? ARBodyAnchor else { continue }

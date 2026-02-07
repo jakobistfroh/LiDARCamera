@@ -15,6 +15,7 @@ final class ARFrameVideoRecorder {
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var didStartSession = false
+    private var lastPresentationTime = CMTime.invalid
 
     private(set) var outputURL: URL?
 
@@ -26,6 +27,7 @@ final class ARFrameVideoRecorder {
 
         let width = CVPixelBufferGetWidth(firstPixelBuffer)
         let height = CVPixelBufferGetHeight(firstPixelBuffer)
+        let pixelFormat = CVPixelBufferGetPixelFormatType(firstPixelBuffer)
 
         // Keep source dimensions to avoid pixel-buffer size mismatch on append.
         let targetWidth = width
@@ -57,7 +59,7 @@ final class ARFrameVideoRecorder {
 
         let sourceAttrs: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String:
-                Int(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
+                Int(pixelFormat),
             kCVPixelBufferWidthKey as String: targetWidth,
             kCVPixelBufferHeightKey as String: targetHeight
         ]
@@ -77,15 +79,22 @@ final class ARFrameVideoRecorder {
         self.input = input
         self.adaptor = adaptor
         self.didStartSession = false
+        self.lastPresentationTime = CMTime.invalid
 
-        print("Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight)")
+        print("Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight), pf=\(pixelFormat)")
     }
 
     func append(pixelBuffer: CVPixelBuffer, timestampSeconds: Double) {
         guard let writer, let input, let adaptor else { return }
-        guard writer.status == .writing || writer.status == .unknown else { return }
+        guard writer.status == .writing || writer.status == .unknown else {
+            print("Append skipped, writer status: \(writer.status.rawValue), error: \(writer.error?.localizedDescription ?? "nil")")
+            return
+        }
 
-        let time = CMTime(seconds: timestampSeconds, preferredTimescale: 600)
+        var time = CMTime(seconds: max(0, timestampSeconds), preferredTimescale: 600)
+        if lastPresentationTime.isValid && CMTimeCompare(time, lastPresentationTime) <= 0 {
+            time = CMTimeAdd(lastPresentationTime, CMTime(value: 1, timescale: 600))
+        }
 
         if !didStartSession {
             didStartSession = true
@@ -95,8 +104,10 @@ final class ARFrameVideoRecorder {
         guard input.isReadyForMoreMediaData else { return }
         let success = adaptor.append(pixelBuffer, withPresentationTime: time)
         if !success {
-            print("Frame append failed, writer status: \(writer.status.rawValue)")
+            print("Frame append failed, writer status: \(writer.status.rawValue), error: \(writer.error?.localizedDescription ?? "nil")")
+            return
         }
+        lastPresentationTime = time
     }
 
     func stop(completion: @escaping (URL?) -> Void) {
@@ -113,9 +124,12 @@ final class ARFrameVideoRecorder {
             self?.input = nil
             self?.adaptor = nil
             self?.didStartSession = false
+            self?.lastPresentationTime = CMTime.invalid
 
-            print("Frame recorder stopped: \(url?.lastPathComponent ?? "nil")")
-            completion(url)
+            let status = writer.status
+            let errorText = writer.error?.localizedDescription ?? "nil"
+            print("Frame recorder stopped: \(url?.lastPathComponent ?? "nil"), status=\(status.rawValue), error=\(errorText)")
+            completion(status == .completed ? url : nil)
         }
     }
 }
