@@ -24,6 +24,7 @@ final class CombinedSessionRecorder {
 
     private var startTimestamp: TimeInterval?
     private var lastMaskTimestamp: TimeInterval = -.greatestFiniteMagnitude
+    private var wallOriginWorld: SIMD3<Float>?
 
     private var videoTimestamps: [FrameTimestamp] = []
     private var depthMaskTimestamps: [FrameTimestamp] = []
@@ -91,6 +92,7 @@ final class CombinedSessionRecorder {
 
         self.startTimestamp = nil
         self.lastMaskTimestamp = -.greatestFiniteMagnitude
+        self.wallOriginWorld = nil
         self.videoTimestamps.removeAll()
         self.depthMaskTimestamps.removeAll()
         self.skeletonFrames.removeAll()
@@ -116,6 +118,10 @@ final class CombinedSessionRecorder {
         )
     }
 
+    func setWallOrigin(_ origin: SIMD3<Float>) {
+        wallOriginWorld = origin
+    }
+
     func process(frame: ARFrame) {
         guard let videoURL else { return }
 
@@ -139,8 +145,9 @@ final class CombinedSessionRecorder {
         }
 
         guard relativeTimestamp - lastMaskTimestamp >= depthMaskInterval else { return }
-        guard let sceneDepth = frame.sceneDepth else { return }
-        guard let mask = maskProcessor.makeMask(from: sceneDepth.depthMap) else { return }
+        let depthData = frame.sceneDepth ?? frame.smoothedSceneDepth
+        guard let depthData else { return }
+        guard let mask = maskProcessor.makeMask(from: depthData.depthMap) else { return }
 
         do {
             try maskHandle?.write(contentsOf: Data(mask))
@@ -154,6 +161,7 @@ final class CombinedSessionRecorder {
 
     func process(anchors: [ARAnchor], currentFrameTimestamp: TimeInterval?) {
         guard let startTimestamp else { return }
+        guard let wallOriginWorld else { return }
         guard let frameTimestamp = currentFrameTimestamp else { return }
         let relativeTimestamp = max(0, frameTimestamp - startTimestamp)
 
@@ -165,6 +173,7 @@ final class CombinedSessionRecorder {
             let bodyTransform = body.transform
 
             var worldJoints: [Int: JointPosition] = [:]
+            var wallJoints: [Int: JointPosition] = [:]
 
             for (i, name) in names.enumerated() {
                 guard let idx = JointIndex.arKitNameToIndex[name] else { continue }
@@ -172,18 +181,20 @@ final class CombinedSessionRecorder {
                 let jointTransform = simd_mul(bodyTransform, transforms[i])
                 let p = jointTransform.columns.3
                 let world = SIMD3<Float>(p.x, p.y, p.z)
+                let wall = world - wallOriginWorld
                 worldJoints[idx.rawValue] = JointPosition(x: world.x, y: world.y, z: world.z)
+                wallJoints[idx.rawValue] = JointPosition(x: wall.x, y: wall.y, z: wall.z)
             }
 
             guard !worldJoints.isEmpty else { continue }
 
-            // In combined mode, no wall calibration is performed.
+            // Combined mode writes both raw world coordinates and calibrated wall coordinates.
             skeletonFrames.append(
                 PoseFrame(
                     frameIndex: skeletonFrameIndex,
                     timestamp: relativeTimestamp,
                     worldJoints: worldJoints,
-                    wallJoints: worldJoints
+                    wallJoints: wallJoints
                 )
             )
             skeletonFrameIndex += 1

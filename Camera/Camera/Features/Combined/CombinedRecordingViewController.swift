@@ -1,20 +1,31 @@
 import UIKit
 import ARKit
 import RealityKit
+import simd
 
 final class CombinedRecordingViewController: UIViewController, ARSessionDelegate {
+    private enum CombinedDepthMode {
+        case sceneDepth
+        case smoothedSceneDepth
+        case unavailable
+    }
 
     private let arView = ARView(frame: .zero)
     private let statusLabel = UILabel()
+    private let calibrateButton = UIButton(type: .system)
     private let startStopButton = UIButton(type: .system)
     private let exportButton = UIButton(type: .system)
 
     private let recorder = CombinedSessionRecorder()
 
     private var isRecording = false
+    private var isCalibrated = false
     private var exportURLs: [URL] = []
     private var selectedVideoFormat: ARConfiguration.VideoFormat?
     private var lidarAvailable = false
+    private var depthMode: CombinedDepthMode = .unavailable
+    private var calibrationAnchor: AnchorEntity?
+    private var wallOriginWorld: SIMD3<Float>?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -56,6 +67,16 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
         startStopButton.addTarget(self, action: #selector(toggleRecording), for: .touchUpInside)
         view.addSubview(startStopButton)
 
+        calibrateButton.translatesAutoresizingMaskIntoConstraints = false
+        calibrateButton.setTitle("Kalibrieren", for: .normal)
+        calibrateButton.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
+        calibrateButton.backgroundColor = .systemOrange
+        calibrateButton.setTitleColor(.white, for: .normal)
+        calibrateButton.layer.cornerRadius = 10
+        calibrateButton.contentEdgeInsets = UIEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        calibrateButton.addTarget(self, action: #selector(calibrateWall), for: .touchUpInside)
+        view.addSubview(calibrateButton)
+
         exportButton.translatesAutoresizingMaskIntoConstraints = false
         exportButton.setTitle("Export ZIP(s)", for: .normal)
         exportButton.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
@@ -82,10 +103,17 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
             startStopButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
             startStopButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
 
+            calibrateButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            calibrateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            calibrateButton.bottomAnchor.constraint(equalTo: startStopButton.topAnchor, constant: -12),
+
             exportButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
             exportButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            exportButton.bottomAnchor.constraint(equalTo: startStopButton.topAnchor, constant: -12)
+            exportButton.bottomAnchor.constraint(equalTo: calibrateButton.topAnchor, constant: -12)
         ])
+
+        startStopButton.isEnabled = false
+        startStopButton.alpha = 0.6
     }
 
     private func configureARSession() {
@@ -97,9 +125,17 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
 
         let config = ARBodyTrackingConfiguration()
         config.isLightEstimationEnabled = true
-        lidarAvailable = ARBodyTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
-        if lidarAvailable {
+        if ARBodyTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
             config.frameSemantics.insert(.sceneDepth)
+            depthMode = .sceneDepth
+            lidarAvailable = true
+        } else if ARBodyTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+            config.frameSemantics.insert(.smoothedSceneDepth)
+            depthMode = .smoothedSceneDepth
+            lidarAvailable = true
+        } else {
+            depthMode = .unavailable
+            lidarAvailable = false
         }
 
         if let format = selectPreferredVideoFormat() {
@@ -114,7 +150,16 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
             "\(Int($0.imageResolution.width))x\(Int($0.imageResolution.height))"
         } ?? "default"
         let fpsText = selectedVideoFormat.map { "\($0.framesPerSecond)" } ?? "default"
-        statusLabel.text = "Ready\nRGB: \(resolutionText) @ \(fpsText) FPS\nLiDAR in combined mode: \(lidarAvailable ? "yes" : "no")"
+        let depthText: String
+        switch depthMode {
+        case .sceneDepth:
+            depthText = "sceneDepth"
+        case .smoothedSceneDepth:
+            depthText = "smoothedSceneDepth"
+        case .unavailable:
+            depthText = "not supported with body tracking on this device"
+        }
+        statusLabel.text = "Ready\nRGB: \(resolutionText) @ \(fpsText) FPS\nDepth mode: \(depthText)"
     }
 
     private func selectPreferredVideoFormat() -> ARConfiguration.VideoFormat? {
@@ -143,6 +188,11 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
     }
 
     private func startRecording() {
+        guard isCalibrated else {
+            statusLabel.text = "Bitte zuerst kalibrieren."
+            return
+        }
+
         let resolution = selectedVideoFormat?.imageResolution ?? arView.bounds.size
         let fps = selectedVideoFormat?.framesPerSecond ?? 60
 
@@ -152,6 +202,9 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
                 videoFPS: fps,
                 lidarAvailable: lidarAvailable
             )
+            if let wallOriginWorld {
+                recorder.setWallOrigin(wallOriginWorld)
+            }
         } catch {
             statusLabel.text = "Failed to prepare recording:\n\(error.localizedDescription)"
             return
@@ -160,6 +213,8 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
         exportURLs.removeAll()
         exportButton.isEnabled = false
         exportButton.alpha = 0.6
+        calibrateButton.isEnabled = false
+        calibrateButton.alpha = 0.6
         isRecording = true
         startStopButton.setTitle("Stop", for: .normal)
         startStopButton.backgroundColor = .systemRed
@@ -175,8 +230,11 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.startStopButton.isEnabled = true
+                self.startStopButton.alpha = 1
                 self.startStopButton.setTitle("Start", for: .normal)
                 self.startStopButton.backgroundColor = .systemBlue
+                self.calibrateButton.isEnabled = true
+                self.calibrateButton.alpha = 1
 
                 switch result {
                 case .success(let zipURLs):
@@ -196,6 +254,51 @@ final class CombinedRecordingViewController: UIViewController, ARSessionDelegate
         guard !exportURLs.isEmpty else { return }
         let shareVC = UIActivityViewController(activityItems: exportURLs, applicationActivities: nil)
         present(shareVC, animated: true)
+    }
+
+    @objc private func calibrateWall() {
+        let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+        let results = arView.raycast(from: center, allowing: .estimatedPlane, alignment: .vertical)
+        guard let result = results.first else {
+            statusLabel.text = "Kalibrierung fehlgeschlagen.\nBitte auf eine Wand zielen."
+            return
+        }
+
+        let t = result.worldTransform.columns.3
+        let origin = SIMD3<Float>(t.x, t.y, t.z)
+        wallOriginWorld = origin
+        recorder.setWallOrigin(origin)
+        isCalibrated = true
+        startStopButton.isEnabled = true
+        startStopButton.alpha = 1
+        addCalibrationMarker(at: origin)
+        statusLabel.text = "Wand kalibriert.\nStart bereit."
+    }
+
+    private func addCalibrationMarker(at worldPosition: SIMD3<Float>) {
+        if let existing = calibrationAnchor {
+            arView.scene.removeAnchor(existing)
+        }
+
+        let anchor = AnchorEntity(world: worldPosition)
+        calibrationAnchor = anchor
+        let material = SimpleMaterial(color: .orange, roughness: 0.3, isMetallic: false)
+
+        let shaft = ModelEntity(mesh: .generateBox(size: [0.008, 0.12, 0.008]), materials: [material])
+        shaft.position = [0, 0.06, 0]
+
+        let headLeft = ModelEntity(mesh: .generateBox(size: [0.006, 0.04, 0.006]), materials: [material])
+        headLeft.position = [-0.012, 0.105, 0]
+        headLeft.orientation = simd_quatf(angle: .pi / 4, axis: [0, 0, 1])
+
+        let headRight = ModelEntity(mesh: .generateBox(size: [0.006, 0.04, 0.006]), materials: [material])
+        headRight.position = [0.012, 0.105, 0]
+        headRight.orientation = simd_quatf(angle: -.pi / 4, axis: [0, 0, 1])
+
+        anchor.addChild(shaft)
+        anchor.addChild(headLeft)
+        anchor.addChild(headRight)
+        arView.scene.addAnchor(anchor)
     }
 
     // MARK: - ARSessionDelegate
