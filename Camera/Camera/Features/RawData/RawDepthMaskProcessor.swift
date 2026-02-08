@@ -67,28 +67,18 @@ final class RawDepthMaskProcessor {
         foreground = dilate(foreground)
         foreground = erode(foreground)
 
+        let denom = max(1e-4, threshold - dMin)
         var mask = Array(repeating: UInt8(0), count: width * height)
-        var fgDepths: [(index: Int, depth: Float)] = []
-        fgDepths.reserveCapacity(width * height)
-
-        for i in 0..<downsampled.count where foreground[i] == 1 {
+        for i in 0..<downsampled.count {
+            guard foreground[i] == 1 else { continue }
             let depth = downsampled[i]
-            if depth.isFinite && depth > 0 {
-                fgDepths.append((index: i, depth: depth))
-            }
-        }
+            guard depth.isFinite && depth > 0 else { continue }
 
-        guard !fgDepths.isEmpty else { return mask }
-
-        // Rank-based mapping guarantees intermediate grayscale values (1...255)
-        // whenever multiple foreground pixels are present.
-        fgDepths.sort { $0.depth < $1.depth } // nearer first
-        let denom = max(1, fgDepths.count - 1)
-
-        for (rank, item) in fgDepths.enumerated() {
-            let t = Float(rank) / Float(denom) // 0..1
-            let gray = UInt8(max(1, min(255, Int((1 - t) * 254) + 1)))
-            mask[item.index] = gray
+            // Near dMin => bright, near threshold => dark.
+            let normalized = (threshold - depth) / denom
+            let clamped = max(0, min(1, normalized))
+            let gray = UInt8(max(1, min(255, Int(clamped * 254) + 1)))
+            mask[i] = gray
         }
 
         return mask

@@ -27,6 +27,7 @@ final class RawDataSessionRecorder {
     private var depthMaskFrameIndex = 0
     private var targetVideoFPS = 30
     private var targetVideoBitRate = 12_000_000
+    private let depthProcessingQueue = DispatchQueue(label: "raw.depth.processing.queue", qos: .utility)
 
     private var maskHandle: FileHandle?
     private var baseMetadata: RawMetadata?
@@ -131,19 +132,28 @@ final class RawDataSessionRecorder {
         guard relativeTimestamp - lastMaskTimestamp >= depthMaskInterval else { return }
         let depthData = frame.sceneDepth ?? frame.smoothedSceneDepth
         guard let depthData else { return }
-        guard let mask = maskProcessor.makeMask(from: depthData.depthMap) else { return }
+        lastMaskTimestamp = relativeTimestamp
 
-        do {
-            try maskHandle?.write(contentsOf: Data(mask))
-            depthMaskTimestamps.append(FrameTimestamp(index: depthMaskFrameIndex, timestamp: relativeTimestamp))
-            depthMaskFrameIndex += 1
-            lastMaskTimestamp = relativeTimestamp
-        } catch {
-            print("depth_mask write failed: \(error)")
+        guard let depthMapCopy = copyDepthMap(depthData.depthMap) else { return }
+
+        depthProcessingQueue.async { [weak self] in
+            guard let self else { return }
+            guard let mask = self.maskProcessor.makeMask(from: depthMapCopy) else { return }
+            do {
+                try self.maskHandle?.write(contentsOf: Data(mask))
+                self.depthMaskTimestamps.append(
+                    FrameTimestamp(index: self.depthMaskFrameIndex, timestamp: relativeTimestamp)
+                )
+                self.depthMaskFrameIndex += 1
+            } catch {
+                print("depth_mask write failed: \(error)")
+            }
         }
     }
 
     func finishRecording(completion: @escaping (Result<URL, Error>) -> Void) {
+        depthProcessingQueue.sync {}
+
         do {
             try maskHandle?.close()
         } catch {
@@ -210,5 +220,48 @@ final class RawDataSessionRecorder {
         let entries = try SimpleZipArchive.allFiles(in: recordingFolderURL, prefix: recordingName)
         try SimpleZipArchive.createArchive(at: zipURL, entries: entries)
         return zipURL
+    }
+
+    private func copyDepthMap(_ source: CVPixelBuffer) -> CVPixelBuffer? {
+        let width = CVPixelBufferGetWidth(source)
+        let height = CVPixelBufferGetHeight(source)
+        let pixelFormat = CVPixelBufferGetPixelFormatType(source)
+
+        var destination: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            pixelFormat,
+            nil,
+            &destination
+        )
+        guard status == kCVReturnSuccess, let destination else { return nil }
+
+        CVPixelBufferLockBaseAddress(source, .readOnly)
+        CVPixelBufferLockBaseAddress(destination, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(destination, [])
+            CVPixelBufferUnlockBaseAddress(source, .readOnly)
+        }
+
+        guard
+            let srcBase = CVPixelBufferGetBaseAddress(source),
+            let dstBase = CVPixelBufferGetBaseAddress(destination)
+        else {
+            return nil
+        }
+
+        let srcBytesPerRow = CVPixelBufferGetBytesPerRow(source)
+        let dstBytesPerRow = CVPixelBufferGetBytesPerRow(destination)
+        let bytesPerRow = min(srcBytesPerRow, dstBytesPerRow)
+
+        for row in 0..<height {
+            let srcPtr = srcBase.advanced(by: row * srcBytesPerRow)
+            let dstPtr = dstBase.advanced(by: row * dstBytesPerRow)
+            memcpy(dstPtr, srcPtr, bytesPerRow)
+        }
+
+        return destination
     }
 }
