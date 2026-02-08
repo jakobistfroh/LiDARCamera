@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var calibrationRequestID = 0
     @State private var exportURL: URL?
     @State private var showShareSheet = false
+    @State private var statusText = "Ready"
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -17,12 +18,21 @@ struct ContentView: View {
                 calibrationRequestID: $calibrationRequestID,
                 onExportReady: { url in
                     exportURL = url
-                    showShareSheet = true
+                    statusText = "Done\n\(url.lastPathComponent)"
                 }
             )
             .edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 12) {
+                Text(statusText)
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.45))
+                    .cornerRadius(10)
+
                 Text(isCalibrated ? "Wand kalibriert" : "Bitte zuerst kalibrieren")
                     .font(.headline)
                     .foregroundColor(isCalibrated ? .green : .white)
@@ -43,14 +53,26 @@ struct ContentView: View {
                 Button(isRecording ? "Stop" : "Start") {
                     if isRecording {
                         isRecording = false
+                        statusText = "Finishing..."
                     } else {
                         ARSessionManager.shared.reset(keepCalibration: true)
+                        exportURL = nil
+                        statusText = "Recording..."
                         isRecording = true
                     }
                 }
                 .disabled(!isCalibrated)
                 .padding()
                 .background(isRecording ? .red : .blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+
+                Button("Export ZIP") {
+                    showShareSheet = true
+                }
+                .disabled(exportURL == nil || isRecording)
+                .padding()
+                .background((exportURL == nil || isRecording) ? .gray : .secondary)
                 .foregroundColor(.white)
                 .cornerRadius(10)
             }
