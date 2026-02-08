@@ -25,8 +25,8 @@ final class RawDataSessionRecorder {
     private var depthMaskTimestamps: [FrameTimestamp] = []
     private var videoFrameIndex = 0
     private var depthMaskFrameIndex = 0
-    private var targetVideoFPS = 60
-    private var targetVideoBitRate = 16_000_000
+    private var targetVideoFPS = 30
+    private var targetVideoBitRate = 12_000_000
 
     private var maskHandle: FileHandle?
     private var baseMetadata: RawMetadata?
@@ -78,8 +78,8 @@ final class RawDataSessionRecorder {
         self.depthMaskTimestamps.removeAll()
         self.videoFrameIndex = 0
         self.depthMaskFrameIndex = 0
-        self.targetVideoFPS = videoFPS
-        self.targetVideoBitRate = videoFPS >= 60 ? 16_000_000 : 10_000_000
+        self.targetVideoFPS = 30
+        self.targetVideoBitRate = 12_000_000
 
         let params = DepthMaskParameters(
             percentile: Double(maskProcessor.percentile),
@@ -91,7 +91,7 @@ final class RawDataSessionRecorder {
             deviceModel: RawDataUtilities.deviceModelIdentifier(),
             iosVersion: UIDevice.current.systemVersion,
             cameraResolution: "\(Int(cameraResolution.width))x\(Int(cameraResolution.height))",
-            videoFPS: videoFPS,
+            videoFPS: targetVideoFPS,
             depthMaskFPS: depthMaskFPS,
             depthMaskEncoding: maskProcessor.encodingName,
             orientation: RawDataUtilities.orientationString(),
