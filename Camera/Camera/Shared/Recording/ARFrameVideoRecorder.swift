@@ -23,7 +23,12 @@ final class ARFrameVideoRecorder {
         writer != nil
     }
 
-    func start(with firstPixelBuffer: CVPixelBuffer, outputURL customOutputURL: URL? = nil) throws {
+    func start(
+        with firstPixelBuffer: CVPixelBuffer,
+        outputURL customOutputURL: URL? = nil,
+        targetFrameRate: Int = 30,
+        averageBitRate: Int = 6_000_000
+    ) throws {
 
         let width = CVPixelBufferGetWidth(firstPixelBuffer)
         let height = CVPixelBufferGetHeight(firstPixelBuffer)
@@ -44,9 +49,9 @@ final class ARFrameVideoRecorder {
             AVVideoWidthKey: targetWidth,
             AVVideoHeightKey: targetHeight,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 6_000_000,
-                AVVideoExpectedSourceFrameRateKey: 30,
-                AVVideoMaxKeyFrameIntervalKey: 30,
+                AVVideoAverageBitRateKey: averageBitRate,
+                AVVideoExpectedSourceFrameRateKey: targetFrameRate,
+                AVVideoMaxKeyFrameIntervalKey: targetFrameRate,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
             ]
         ]
@@ -81,7 +86,7 @@ final class ARFrameVideoRecorder {
         self.didStartSession = false
         self.lastPresentationTime = CMTime.invalid
 
-        print("Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight), pf=\(pixelFormat)")
+        print("Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight), fps=\(targetFrameRate), bitrate=\(averageBitRate), pf=\(pixelFormat)")
     }
 
     @discardableResult

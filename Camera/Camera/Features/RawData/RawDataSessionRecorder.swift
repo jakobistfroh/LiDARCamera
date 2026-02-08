@@ -25,6 +25,8 @@ final class RawDataSessionRecorder {
     private var depthMaskTimestamps: [FrameTimestamp] = []
     private var videoFrameIndex = 0
     private var depthMaskFrameIndex = 0
+    private var targetVideoFPS = 60
+    private var targetVideoBitRate = 16_000_000
 
     private var maskHandle: FileHandle?
     private var baseMetadata: RawMetadata?
@@ -76,6 +78,8 @@ final class RawDataSessionRecorder {
         self.depthMaskTimestamps.removeAll()
         self.videoFrameIndex = 0
         self.depthMaskFrameIndex = 0
+        self.targetVideoFPS = videoFPS
+        self.targetVideoBitRate = videoFPS >= 60 ? 16_000_000 : 10_000_000
 
         let params = DepthMaskParameters(
             percentile: Double(maskProcessor.percentile),
@@ -107,7 +111,12 @@ final class RawDataSessionRecorder {
 
         if !videoRecorder.isRecording {
             do {
-                try videoRecorder.start(with: frame.capturedImage, outputURL: videoURL)
+                try videoRecorder.start(
+                    with: frame.capturedImage,
+                    outputURL: videoURL,
+                    targetFrameRate: targetVideoFPS,
+                    averageBitRate: targetVideoBitRate
+                )
             } catch {
                 print("Raw video start failed: \(error)")
                 return
@@ -120,8 +129,9 @@ final class RawDataSessionRecorder {
         }
 
         guard relativeTimestamp - lastMaskTimestamp >= depthMaskInterval else { return }
-        guard let sceneDepth = frame.sceneDepth else { return }
-        guard let mask = maskProcessor.makeMask(from: sceneDepth.depthMap) else { return }
+        let depthData = frame.sceneDepth ?? frame.smoothedSceneDepth
+        guard let depthData else { return }
+        guard let mask = maskProcessor.makeMask(from: depthData.depthMap) else { return }
 
         do {
             try maskHandle?.write(contentsOf: Data(mask))

@@ -15,6 +15,7 @@ final class RawDataRecordingViewController: UIViewController, ARSessionDelegate 
     private var exportURL: URL?
     private var selectedVideoFormat: ARConfiguration.VideoFormat?
     private var lidarAvailable = false
+    private var depthModeLabel = "none"
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -90,9 +91,17 @@ final class RawDataRecordingViewController: UIViewController, ARSessionDelegate 
 
     private func configureARSession() {
         let config = ARWorldTrackingConfiguration()
-        lidarAvailable = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
-        if lidarAvailable {
+        if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
             config.frameSemantics.insert(.sceneDepth)
+            lidarAvailable = true
+            depthModeLabel = "sceneDepth"
+        } else if ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+            config.frameSemantics.insert(.smoothedSceneDepth)
+            lidarAvailable = true
+            depthModeLabel = "smoothedSceneDepth"
+        } else {
+            lidarAvailable = false
+            depthModeLabel = "none"
         }
 
         if let format = selectPreferredVideoFormat() {
@@ -114,7 +123,7 @@ final class RawDataRecordingViewController: UIViewController, ARSessionDelegate 
             resolutionText = "default"
             fpsText = "default"
         }
-        statusLabel.text = "Ready\nRGB: \(resolutionText) @ \(fpsText) FPS\nLiDAR: \(lidarAvailable ? "yes" : "no")"
+        statusLabel.text = "Ready\nRGB: \(resolutionText) @ \(fpsText) FPS\nDepth: \(depthModeLabel)"
     }
 
     private func selectPreferredVideoFormat() -> ARConfiguration.VideoFormat? {
