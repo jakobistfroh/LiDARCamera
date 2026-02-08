@@ -102,7 +102,7 @@ final class ARFrameVideoRecorder {
             writer.startSession(atSourceTime: time)
         }
 
-        guard input.isReadyForMoreMediaData else { return }
+        guard input.isReadyForMoreMediaData else { return false }
         let success = adaptor.append(pixelBuffer, withPresentationTime: time)
         if !success {
             print("Frame append failed, writer status: \(writer.status.rawValue), error: \(writer.error?.localizedDescription ?? "nil")")
