@@ -4,6 +4,7 @@ final class HomeViewController: UIViewController {
 
     private let skeletonButton = UIButton(type: .system)
     private let rawDataButton = UIButton(type: .system)
+    private let combinedButton = UIButton(type: .system)
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -17,8 +18,9 @@ final class HomeViewController: UIViewController {
     private func setupUI() {
         skeletonButton.setTitle("Skeleton Recording", for: .normal)
         rawDataButton.setTitle("Raw Data Recording", for: .normal)
+        combinedButton.setTitle("Combined Export Mode", for: .normal)
 
-        [skeletonButton, rawDataButton].forEach { button in
+        [skeletonButton, rawDataButton, combinedButton].forEach { button in
             button.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
             button.backgroundColor = .systemBlue
             button.setTitleColor(.white, for: .normal)
@@ -29,8 +31,9 @@ final class HomeViewController: UIViewController {
 
         skeletonButton.addTarget(self, action: #selector(openSkeletonMode), for: .touchUpInside)
         rawDataButton.addTarget(self, action: #selector(openRawDataMode), for: .touchUpInside)
+        combinedButton.addTarget(self, action: #selector(openCombinedMode), for: .touchUpInside)
 
-        let stack = UIStackView(arrangedSubviews: [skeletonButton, rawDataButton])
+        let stack = UIStackView(arrangedSubviews: [skeletonButton, rawDataButton, combinedButton])
         stack.axis = .vertical
         stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -49,5 +52,9 @@ final class HomeViewController: UIViewController {
 
     @objc private func openRawDataMode() {
         navigationController?.pushViewController(RawDataRecordingViewController(), animated: true)
+    }
+
+    @objc private func openCombinedMode() {
+        navigationController?.pushViewController(CombinedRecordingViewController(), animated: true)
     }
 }

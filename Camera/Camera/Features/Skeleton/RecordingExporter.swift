@@ -1,5 +1,4 @@
 import Foundation
-import ZIPFoundation
 
 struct RecordingExporter {
 
@@ -35,13 +34,14 @@ struct RecordingExporter {
             .appendingPathComponent("recording_export_\(Int(Date().timeIntervalSince1970)).zip")
         try? fm.removeItem(at: zipURL)
 
-        let archive = try Archive(url: zipURL, accessMode: .create)
-        try archive.addEntry(with: "recording.json", fileURL: jsonURL)
-
+        var entries: [SimpleZipArchive.Entry] = [
+            .init(fileURL: jsonURL, archivePath: "recording.json")
+        ]
         if let videoFileName {
             let targetVideoURL = exportFolder.appendingPathComponent(videoFileName)
-            try archive.addEntry(with: videoFileName, fileURL: targetVideoURL)
+            entries.append(.init(fileURL: targetVideoURL, archivePath: videoFileName))
         }
+        try SimpleZipArchive.createArchive(at: zipURL, entries: entries)
 
         print("ZIP erstellt: \(zipURL.path)")
         return zipURL

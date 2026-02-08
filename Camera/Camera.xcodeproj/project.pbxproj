@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		FCC8E3692EDB0ECB0079C437 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = FCC8E3682EDB0ECB0079C437 /* ZIPFoundation */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
 		FCC8E33E2ED5AEEF0079C437 /* Camera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Camera.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -27,7 +23,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FCC8E3692EDB0ECB0079C437 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +65,6 @@
 			);
 			name = Camera;
 			packageProductDependencies = (
-				FCC8E3682EDB0ECB0079C437 /* ZIPFoundation */,
 			);
 			productName = Camera;
 			productReference = FCC8E33E2ED5AEEF0079C437 /* Camera.app */;
@@ -102,7 +96,6 @@
 			mainGroup = FCC8E3352ED5AEEF0079C437;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FCC8E3672EDB0ECB0079C437 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FCC8E33F2ED5AEEF0079C437 /* Products */;
@@ -345,25 +338,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		FCC8E3672EDB0ECB0079C437 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.20;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		FCC8E3682EDB0ECB0079C437 /* ZIPFoundation */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = FCC8E3672EDB0ECB0079C437 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
-			productName = ZIPFoundation;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 	};
 	rootObject = FCC8E3362ED5AEEF0079C437 /* Project object */;
