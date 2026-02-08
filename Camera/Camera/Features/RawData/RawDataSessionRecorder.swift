@@ -1,6 +1,7 @@
 import Foundation
 import ARKit
 import UIKit
+import ZIPFoundation
 
 final class RawDataSessionRecorder {
 
@@ -193,7 +194,18 @@ final class RawDataSessionRecorder {
 
         let fm = FileManager.default
         try? fm.removeItem(at: zipURL)
-        try fm.zipItem(at: recordingFolderURL, to: zipURL, shouldKeepParent: true)
+        let archive = try Archive(url: zipURL, accessMode: .create)
+
+        let fileURLs = try fm.contentsOfDirectory(
+            at: recordingFolderURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+
+        for fileURL in fileURLs where fileURL.hasDirectoryPath == false {
+            try archive.addEntry(with: fileURL.lastPathComponent, fileURL: fileURL)
+        }
+
         return zipURL
     }
 }
