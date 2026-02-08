@@ -7,12 +7,14 @@ final class RawDepthMaskProcessor {
     let height: Int
     let percentile: Float
     let deltaMeters: Float
+    let encodingName: String
 
     init(width: Int = 160, height: Int = 120, percentile: Float = 0.15, deltaMeters: Float = 0.3) {
         self.width = width
         self.height = height
         self.percentile = percentile
         self.deltaMeters = deltaMeters
+        self.encodingName = "grayscale8_relative_depth"
     }
 
     func makeMask(from depthMap: CVPixelBuffer) -> [UInt8]? {
@@ -53,17 +55,28 @@ final class RawDepthMaskProcessor {
         let dMin = validDepths[percentileIndex]
         let threshold = dMin + deltaMeters
 
-        var mask = Array(repeating: UInt8(0), count: width * height)
+        var foreground = Array(repeating: UInt8(0), count: width * height)
         for i in 0..<downsampled.count {
             let depth = downsampled[i]
             if depth.isFinite && depth > 0 && depth < threshold {
-                mask[i] = 1
+                foreground[i] = 1
             }
         }
 
         // Closing to keep thin limbs connected.
-        mask = dilate(mask)
-        mask = erode(mask)
+        foreground = dilate(foreground)
+        foreground = erode(foreground)
+
+        var mask = Array(repeating: UInt8(0), count: width * height)
+        for i in 0..<downsampled.count {
+            guard foreground[i] == 1 else { continue }
+            let depth = downsampled[i]
+            guard depth.isFinite && depth > 0 else { continue }
+            let normalized = 1 - ((depth - dMin) / deltaMeters)
+            let clamped = max(0, min(1, normalized))
+            mask[i] = UInt8(clamped * 255)
+        }
+
         return mask
     }
 

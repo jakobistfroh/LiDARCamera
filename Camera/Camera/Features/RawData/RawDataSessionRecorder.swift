@@ -89,6 +89,7 @@ final class RawDataSessionRecorder {
             cameraResolution: "\(Int(cameraResolution.width))x\(Int(cameraResolution.height))",
             videoFPS: videoFPS,
             depthMaskFPS: depthMaskFPS,
+            depthMaskEncoding: maskProcessor.encodingName,
             orientation: RawDataUtilities.orientationString(),
             lidarAvailable: lidarAvailable,
             depthMaskParameters: params
@@ -181,6 +182,7 @@ final class RawDataSessionRecorder {
             cameraResolution: baseMetadata.cameraResolution,
             videoFPS: baseMetadata.videoFPS,
             depthMaskFPS: baseMetadata.depthMaskFPS,
+            depthMaskEncoding: baseMetadata.depthMaskEncoding,
             orientation: RawDataUtilities.orientationString(),
             lidarAvailable: baseMetadata.lidarAvailable,
             depthMaskParameters: baseMetadata.depthMaskParameters

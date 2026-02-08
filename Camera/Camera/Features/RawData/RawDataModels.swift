@@ -23,6 +23,7 @@ struct RawMetadata: Codable {
     let cameraResolution: String
     let videoFPS: Int
     let depthMaskFPS: Int
+    let depthMaskEncoding: String
     let orientation: String
     let lidarAvailable: Bool
     let depthMaskParameters: DepthMaskParameters
