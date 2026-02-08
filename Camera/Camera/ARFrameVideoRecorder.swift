@@ -23,7 +23,7 @@ final class ARFrameVideoRecorder {
         writer != nil
     }
 
-    func start(with firstPixelBuffer: CVPixelBuffer) throws {
+    func start(with firstPixelBuffer: CVPixelBuffer, outputURL customOutputURL: URL? = nil) throws {
 
         let width = CVPixelBufferGetWidth(firstPixelBuffer)
         let height = CVPixelBufferGetHeight(firstPixelBuffer)
@@ -33,7 +33,7 @@ final class ARFrameVideoRecorder {
         let targetWidth = width
         let targetHeight = height
 
-        let url = FileManager.default.temporaryDirectory
+        let url = customOutputURL ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("recording_\(Int(Date().timeIntervalSince1970)).mp4")
         outputURL = url
 
@@ -84,11 +84,12 @@ final class ARFrameVideoRecorder {
         print("Frame recorder started: \(url.lastPathComponent) \(targetWidth)x\(targetHeight), pf=\(pixelFormat)")
     }
 
-    func append(pixelBuffer: CVPixelBuffer, timestampSeconds: Double) {
-        guard let writer, let input, let adaptor else { return }
+    @discardableResult
+    func append(pixelBuffer: CVPixelBuffer, timestampSeconds: Double) -> Bool {
+        guard let writer, let input, let adaptor else { return false }
         guard writer.status == .writing || writer.status == .unknown else {
             print("Append skipped, writer status: \(writer.status.rawValue), error: \(writer.error?.localizedDescription ?? "nil")")
-            return
+            return false
         }
 
         var time = CMTime(seconds: max(0, timestampSeconds), preferredTimescale: 600)
@@ -105,9 +106,10 @@ final class ARFrameVideoRecorder {
         let success = adaptor.append(pixelBuffer, withPresentationTime: time)
         if !success {
             print("Frame append failed, writer status: \(writer.status.rawValue), error: \(writer.error?.localizedDescription ?? "nil")")
-            return
+            return false
         }
         lastPresentationTime = time
+        return true
     }
 
     func stop(completion: @escaping (URL?) -> Void) {

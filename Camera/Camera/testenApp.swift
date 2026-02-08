@@ -12,7 +12,8 @@ import SwiftUI
 struct testenApp: App {
     var body: some Scene {
         WindowGroup {
-            StartView()
+            RootNavigationContainer()
+                .ignoresSafeArea()
         }
     }
 }
