@@ -11,6 +11,7 @@ final class RawDataSessionRecorder {
     private let depthMaskInterval: TimeInterval
 
     private var recordingFolderURL: URL?
+    private var recordingName: String?
     private var videoURL: URL?
     private var depthMaskURL: URL?
     private var timestampsURL: URL?
@@ -42,8 +43,8 @@ final class RawDataSessionRecorder {
     func prepareRecording(cameraResolution: CGSize, videoFPS: Int, lidarAvailable: Bool) throws {
         let fm = FileManager.default
         let tempDir = fm.temporaryDirectory
-        let index = RawDataUtilities.nextRawRecordingIndex(in: tempDir)
-        let folderName = String(format: "recording_raw_%03d", index)
+        let index = RawDataUtilities.nextRecordingIndex(mode: "raw", in: tempDir)
+        let folderName = RawDataUtilities.recordingName(mode: "raw", index: index)
 
         let folderURL = tempDir.appendingPathComponent(folderName, isDirectory: true)
         let videoURL = folderURL.appendingPathComponent("video.mp4")
@@ -62,6 +63,7 @@ final class RawDataSessionRecorder {
         }
 
         self.recordingFolderURL = folderURL
+        self.recordingName = folderName
         self.videoURL = videoURL
         self.depthMaskURL = depthMaskURL
         self.timestampsURL = timestampsURL
@@ -187,13 +189,13 @@ final class RawDataSessionRecorder {
     }
 
     private func zipRecordingFolder() throws -> URL {
-        guard let recordingFolderURL, let zipURL else {
+        guard let recordingFolderURL, let recordingName, let zipURL else {
             throw NSError(domain: "RawDataSessionRecorder", code: 1004, userInfo: [NSLocalizedDescriptionKey: "Missing recording folder"])
         }
 
         let fm = FileManager.default
         try? fm.removeItem(at: zipURL)
-        let entries = try SimpleZipArchive.allFiles(in: recordingFolderURL)
+        let entries = try SimpleZipArchive.allFiles(in: recordingFolderURL, prefix: recordingName)
         try SimpleZipArchive.createArchive(at: zipURL, entries: entries)
         return zipURL
     }

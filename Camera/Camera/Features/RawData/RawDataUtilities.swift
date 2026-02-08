@@ -25,12 +25,17 @@ enum RawDataUtilities {
         }
     }
 
-    static func nextRawRecordingIndex(in directory: URL) -> Int {
+    static func recordingName(mode: String, index: Int) -> String {
+        String(format: "recording_%@_%03d", mode, index)
+    }
+
+    static func nextRecordingIndex(mode: String, in directory: URL) -> Int {
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return 1
         }
-        let regex = try? NSRegularExpression(pattern: #"recording_raw_(\d{3})\.zip"#)
+        let escapedMode = NSRegularExpression.escapedPattern(for: mode)
+        let regex = try? NSRegularExpression(pattern: #"recording_\#(escapedMode)_(\d{3})\.zip"#)
         let indices = items.compactMap { url -> Int? in
             let name = url.lastPathComponent
             let range = NSRange(name.startIndex..<name.endIndex, in: name)
@@ -41,5 +46,9 @@ enum RawDataUtilities {
             return Int(name[idxRange])
         }
         return (indices.max() ?? 0) + 1
+    }
+
+    static func nextRawRecordingIndex(in directory: URL) -> Int {
+        nextRecordingIndex(mode: "raw", in: directory)
     }
 }
