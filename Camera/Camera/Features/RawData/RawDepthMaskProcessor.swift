@@ -67,14 +67,27 @@ final class RawDepthMaskProcessor {
         foreground = dilate(foreground)
         foreground = erode(foreground)
 
+        var fgMin = Float.greatestFiniteMagnitude
+        var fgMax: Float = 0
+        for i in 0..<downsampled.count where foreground[i] == 1 {
+            let depth = downsampled[i]
+            guard depth.isFinite && depth > 0 else { continue }
+            fgMin = min(fgMin, depth)
+            fgMax = max(fgMax, depth)
+        }
+
+        // Stretch foreground depth to 1...255 each frame so values are not effectively binary.
+        let range = max(1e-4, fgMax - fgMin)
         var mask = Array(repeating: UInt8(0), count: width * height)
         for i in 0..<downsampled.count {
             guard foreground[i] == 1 else { continue }
             let depth = downsampled[i]
             guard depth.isFinite && depth > 0 else { continue }
-            let normalized = 1 - ((depth - dMin) / deltaMeters)
+
+            let normalized = (depth - fgMin) / range
             let clamped = max(0, min(1, normalized))
-            mask[i] = UInt8(clamped * 255)
+            let gray = UInt8(max(1, min(255, Int((1 - clamped) * 254) + 1)))
+            mask[i] = gray
         }
 
         return mask
