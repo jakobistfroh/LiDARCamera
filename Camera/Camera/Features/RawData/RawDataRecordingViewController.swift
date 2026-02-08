@@ -154,7 +154,7 @@ final class RawDataRecordingViewController: UIViewController, ARSessionDelegate 
 
     private func startRecording() {
         let resolution = selectedVideoFormat?.imageResolution ?? arView.bounds.size
-        let fps = 30
+        let fps = 60
 
         do {
             try recorder.prepareRecording(

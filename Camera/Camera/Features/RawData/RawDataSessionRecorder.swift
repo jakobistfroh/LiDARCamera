@@ -25,8 +25,8 @@ final class RawDataSessionRecorder {
     private var depthMaskTimestamps: [FrameTimestamp] = []
     private var videoFrameIndex = 0
     private var depthMaskFrameIndex = 0
-    private var targetVideoFPS = 30
-    private var targetVideoBitRate = 12_000_000
+    private var targetVideoFPS = 60
+    private var targetVideoBitRate = 16_000_000
     private let depthProcessingQueue = DispatchQueue(label: "raw.depth.processing.queue", qos: .utility)
 
     private var maskHandle: FileHandle?
@@ -79,8 +79,8 @@ final class RawDataSessionRecorder {
         self.depthMaskTimestamps.removeAll()
         self.videoFrameIndex = 0
         self.depthMaskFrameIndex = 0
-        self.targetVideoFPS = 30
-        self.targetVideoBitRate = 12_000_000
+        self.targetVideoFPS = 60
+        self.targetVideoBitRate = 16_000_000
 
         let params = DepthMaskParameters(
             percentile: Double(maskProcessor.percentile),
