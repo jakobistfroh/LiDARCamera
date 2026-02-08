@@ -74,12 +74,16 @@ final class ARFrameVideoRecorder {
             sourcePixelBufferAttributes: sourceAttrs
         )
 
-        guard writer!.canAdd(input) else {
+        guard let writer else {
+            throw NSError(domain: "ARFrameVideoRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: "Writer setup failed"])
+        }
+
+        guard writer.canAdd(input) else {
             throw NSError(domain: "ARFrameVideoRecorder", code: -1)
         }
 
-        writer!.add(input)
-        writer!.startWriting()
+        writer.add(input)
+        writer.startWriting()
 
         self.input = input
         self.adaptor = adaptor

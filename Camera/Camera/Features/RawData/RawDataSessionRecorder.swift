@@ -76,11 +76,13 @@ final class RawDataSessionRecorder {
         self.startTimestamp = nil
         self.lastMaskTimestamp = -.greatestFiniteMagnitude
         self.videoTimestamps.removeAll()
-        self.depthMaskTimestamps.removeAll()
         self.videoFrameIndex = 0
-        self.depthMaskFrameIndex = 0
         self.targetVideoFPS = 60
         self.targetVideoBitRate = 16_000_000
+        depthProcessingQueue.sync {
+            self.depthMaskTimestamps.removeAll()
+            self.depthMaskFrameIndex = 0
+        }
 
         let params = DepthMaskParameters(
             percentile: Double(maskProcessor.percentile),
@@ -141,8 +143,9 @@ final class RawDataSessionRecorder {
             guard let mask = self.maskProcessor.makeMask(from: depthMapCopy) else { return }
             do {
                 try self.maskHandle?.write(contentsOf: Data(mask))
+                let frameIndex = self.depthMaskFrameIndex
                 self.depthMaskTimestamps.append(
-                    FrameTimestamp(index: self.depthMaskFrameIndex, timestamp: relativeTimestamp)
+                    FrameTimestamp(index: frameIndex, timestamp: relativeTimestamp)
                 )
                 self.depthMaskFrameIndex += 1
             } catch {
@@ -191,7 +194,8 @@ final class RawDataSessionRecorder {
             videoURL = finalVideoURL
         }
 
-        let timestamps = RawTimestamps(videoFrames: videoTimestamps, depthMaskFrames: depthMaskTimestamps)
+        let depthMaskTimestampsSnapshot = depthProcessingQueue.sync { depthMaskTimestamps }
+        let timestamps = RawTimestamps(videoFrames: videoTimestamps, depthMaskFrames: depthMaskTimestampsSnapshot)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(timestamps).write(to: timestampsURL)
