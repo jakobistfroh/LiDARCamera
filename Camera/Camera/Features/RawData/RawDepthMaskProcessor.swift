@@ -67,27 +67,28 @@ final class RawDepthMaskProcessor {
         foreground = dilate(foreground)
         foreground = erode(foreground)
 
-        var fgMin = Float.greatestFiniteMagnitude
-        var fgMax: Float = 0
+        var mask = Array(repeating: UInt8(0), count: width * height)
+        var fgDepths: [(index: Int, depth: Float)] = []
+        fgDepths.reserveCapacity(width * height)
+
         for i in 0..<downsampled.count where foreground[i] == 1 {
             let depth = downsampled[i]
-            guard depth.isFinite && depth > 0 else { continue }
-            fgMin = min(fgMin, depth)
-            fgMax = max(fgMax, depth)
+            if depth.isFinite && depth > 0 {
+                fgDepths.append((index: i, depth: depth))
+            }
         }
 
-        // Stretch foreground depth to 1...255 each frame so values are not effectively binary.
-        let range = max(1e-4, fgMax - fgMin)
-        var mask = Array(repeating: UInt8(0), count: width * height)
-        for i in 0..<downsampled.count {
-            guard foreground[i] == 1 else { continue }
-            let depth = downsampled[i]
-            guard depth.isFinite && depth > 0 else { continue }
+        guard !fgDepths.isEmpty else { return mask }
 
-            let normalized = (depth - fgMin) / range
-            let clamped = max(0, min(1, normalized))
-            let gray = UInt8(max(1, min(255, Int((1 - clamped) * 254) + 1)))
-            mask[i] = gray
+        // Rank-based mapping guarantees intermediate grayscale values (1...255)
+        // whenever multiple foreground pixels are present.
+        fgDepths.sort { $0.depth < $1.depth } // nearer first
+        let denom = max(1, fgDepths.count - 1)
+
+        for (rank, item) in fgDepths.enumerated() {
+            let t = Float(rank) / Float(denom) // 0..1
+            let gray = UInt8(max(1, min(255, Int((1 - t) * 254) + 1)))
+            mask[item.index] = gray
         }
 
         return mask
